@@ -1,101 +1,102 @@
 # Robot Arena
 
-> Working title · A compact third-person arena shooter prototype built with Unity.
+> Рабочее название · Компактный прототип аренного шутера от третьего лица, созданный на Unity.
 
-Robot Arena is a short single-player combat experience in which the player controls a physics-driven combat robot, destroys patrol units and survives a timed reinforcement wave.
+Robot Arena — короткая однопользовательская игра, в которой игрок управляет физическим боевым роботом, уничтожает патрульных противников и переживает ограниченную по времени волну подкреплений.
 
-The project was created as a gameplay and AI programming exercise and is presented here as part of my game-development portfolio.
+Проект создан для изучения разработки игровой логики и искусственного интеллекта и представлен здесь как часть моего портфолио разработчика игр.
 
-## Gameplay
+## Игровой процесс
 
-- Physics-based, camera-relative movement
-- Twin-barrel projectile shooting
-- Defensive braking, jumping and a recoil-style ultimate ability
-- Enemy patrol, detection, chase and ranged-combat states
-- NavMesh navigation and waypoint routes
-- Health, damage, respawn, pause, victory and defeat systems
-- Initial arena encounter followed by a timed enemy wave
+- Физическое управление относительно направления камеры
+- Стрельба снарядами из двух стволов
+- Торможение, прыжок и особая способность с импульсом отдачи
+- Патрулирование, обнаружение игрока, преследование и стрельба противников
+- Навигация ботов по NavMesh и маршрутам из контрольных точек
+- Системы здоровья, урона, респавна, паузы, победы и поражения
+- Начальное сражение на арене и последующая волна противников с таймером
 
-## Controls
+## Управление
 
-| Input | Action |
+| Клавиша | Действие |
 | --- | --- |
-| `WASD` | Move relative to the camera |
-| `Mouse` | Rotate the camera |
-| `Left Mouse Button` | Fire |
-| `Space` | Jump |
-| `Ctrl` | Brake |
-| `Q` | Ultimate / recoil impulse |
-| `Esc` | Pause |
+| `WASD` | Движение относительно камеры |
+| `Мышь` | Вращение камеры |
+| `Левая кнопка мыши` | Выстрел |
+| `Пробел` | Прыжок |
+| `Ctrl` | Торможение |
+| `Q` | Особая способность / импульс отдачи |
+| `Esc` | Пауза |
 
-## Tech stack
+## Технологии
 
 - Unity `2022.3.56f1` (LTS)
 - C#
-- Unity PhysX / Rigidbody physics
-- Unity AI Navigation and NavMesh
-- Animator state machines
+- Unity PhysX и физика Rigidbody
+- Unity AI Navigation и NavMesh
+- Animator State Machine
 - Cinemachine
-- TextMesh Pro and UGUI
+- TextMesh Pro и UGUI
 
-## Code highlights
+## Особенности реализации
 
-- Shared `IDamageable` contract for player and enemy damage handling
-- Event-based health-bar updates
-- Animator-driven enemy state behaviours for idle, patrol and combat
-- Wave manager with spawn limits, timer and UI counters
-- Separate components for movement, shooting, health, detection and menus
+- Общий интерфейс `IDamageable` для обработки урона игрока и противников
+- Событийное обновление индикатора здоровья
+- Состояния ботов Idle, Patrol и Combat на основе Animator
+- Менеджер волн с ограничением количества противников, таймером и UI-счётчиками
+- Разделение передвижения, стрельбы, здоровья, обнаружения игрока и меню на отдельные компоненты
 
-The main gameplay code is located in [`Assets/Scripts`](Assets/Scripts).
+Основной код игровой логики находится в каталоге [`Assets/Scripts`](Assets/Scripts).
 
-## Project structure
+## Структура проекта
 
 ```text
 Assets/
-├── Controllers/       Animator controllers
-├── Effects/           Gameplay effects
-├── Models/            Player model and textures
-├── Prefabs/           Robots, projectiles, props and UI
-├── Scenes/            Title screen and gameplay arena
-├── Scripts/           Gameplay C# source code
-└── Textures/UI/       Interface artwork
-Packages/              Unity package manifest and lock file
-ProjectSettings/       Unity project configuration
+├── Controllers/       Контроллеры Animator
+├── Effects/           Игровые эффекты
+├── Models/            Модель игрока и текстуры
+├── Prefabs/           Роботы, снаряды, окружение и интерфейс
+├── Scenes/            Главное меню и игровая арена
+├── Scripts/           Исходный код игровой логики на C#
+└── Textures/UI/       Графика интерфейса
+Packages/              Манифест и список пакетов Unity
+ProjectSettings/       Настройки проекта Unity
+Build/                 Готовая сборка для Windows
 ```
 
-## Running the project
+## Запуск игры
 
-### Play the Windows build
+### Готовая сборка для Windows
 
-1. Install [Git LFS](https://git-lfs.com/).
-2. Clone the repository normally so that LFS downloads the game data.
-3. Run [`Build/Game.exe`](Build/Game.exe).
+1. Установите [Git LFS](https://git-lfs.com/).
+2. Клонируйте репозиторий обычной командой `git clone`, чтобы LFS загрузил игровые данные.
+3. Запустите [`Build/Game.exe`](Build/Game.exe).
 
-Keep `Game.exe`, `Game_Data`, `MonoBleedingEdge`, `UnityPlayer.dll`, and
-`UnityCrashHandler64.exe` together in the `Build` directory. Windows may show a
-SmartScreen warning because this portfolio build is not code-signed.
+Файлы `Game.exe`, `Game_Data`, `MonoBleedingEdge`, `UnityPlayer.dll` и `UnityCrashHandler64.exe` должны оставаться вместе в каталоге `Build`.
 
-### Open the Unity project
+Windows может показать предупреждение SmartScreen, поскольку портфолио-сборка не имеет цифровой подписи.
 
-1. Install Unity Hub and Unity Editor `2022.3.56f1`.
-2. Make sure [Git LFS](https://git-lfs.com/) is installed.
-3. Clone the repository.
-4. Open the repository directory as a project in Unity Hub.
-5. Open `Assets/Scenes/Title Screen.unity` and enter Play Mode.
+### Запуск в редакторе Unity
 
-The scenes included in Build Settings are:
+1. Установите Unity Hub и Unity Editor `2022.3.56f1`.
+2. Убедитесь, что в системе установлен [Git LFS](https://git-lfs.com/).
+3. Клонируйте репозиторий.
+4. Добавьте каталог репозитория как проект в Unity Hub.
+5. Откройте сцену `Assets/Scenes/Title Screen.unity` и запустите Play Mode.
+
+В Build Settings включены две сцены:
 
 1. `Assets/Scenes/Title Screen.unity`
 2. `Assets/Scenes/SampleScene.unity`
 
-## Project status
+## Статус проекта
 
-This is a playable portfolio prototype rather than a finished commercial release. Current development priorities include refining projectile physics, improving combat feedback and audio, expanding enemy variety, and polishing the UI.
+Это играбельный прототип для портфолио, а не законченный коммерческий релиз. Основные направления дальнейшего развития: улучшение физики снарядов, звука и обратной связи от попаданий, добавление новых типов противников и доработка интерфейса.
 
-## Third-party assets
+## Сторонние ресурсы
 
-The repository contains third-party Unity assets, including TextMesh Pro resources, a particle-effect pack, and a stylized skybox. Those assets remain subject to their original authors' terms. The gameplay code in `Assets/Scripts` is the project's original implementation.
+В репозитории используются сторонние ресурсы Unity, включая TextMesh Pro, набор эффектов частиц и стилизованный скайбокс. Права на эти материалы и условия их использования принадлежат их авторам. Игровая логика в каталоге `Assets/Scripts` является оригинальной частью проекта.
 
-## Author
+## Автор
 
-Developed by **DinEv**.
+Разработчик — **DinEv**.
