@@ -65,6 +65,18 @@ ProjectSettings/       Unity project configuration
 
 ## Running the project
 
+### Play the Windows build
+
+1. Install [Git LFS](https://git-lfs.com/).
+2. Clone the repository normally so that LFS downloads the game data.
+3. Run [`Build/Game.exe`](Build/Game.exe).
+
+Keep `Game.exe`, `Game_Data`, `MonoBleedingEdge`, `UnityPlayer.dll`, and
+`UnityCrashHandler64.exe` together in the `Build` directory. Windows may show a
+SmartScreen warning because this portfolio build is not code-signed.
+
+### Open the Unity project
+
 1. Install Unity Hub and Unity Editor `2022.3.56f1`.
 2. Make sure [Git LFS](https://git-lfs.com/) is installed.
 3. Clone the repository.
@@ -87,4 +99,3 @@ The repository contains third-party Unity assets, including TextMesh Pro resourc
 ## Author
 
 Developed by **DinEv**.
-

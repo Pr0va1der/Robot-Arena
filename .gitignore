@@ -7,8 +7,9 @@
 /[Mm]emoryCaptures/
 /[Rr]ecordings/
 
-# Local builds and exported players
-/[Bb]uild/
+# The ready-to-play Windows build is intentionally versioned for portfolio use.
+# Do not store a duplicate archive of the same build.
+/Build/Build.zip
 /[Bb]uilds/
 
 # IDE and editor files
@@ -41,4 +42,3 @@ Desktop.ini
 
 # Keep Asset Store tools out of source control when generated locally
 /Assets/AssetStoreTools*
-

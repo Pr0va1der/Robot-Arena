@@ -32,3 +32,6 @@
 *.otf filter=lfs diff=lfs merge=lfs -text
 *.dll filter=lfs diff=lfs merge=lfs -text
 
+# Ready-to-play Windows build. Some Unity data files exceed GitHub's normal
+# per-file limit, so the complete exported player is stored through Git LFS.
+/Build/** filter=lfs diff=lfs merge=lfs -text
