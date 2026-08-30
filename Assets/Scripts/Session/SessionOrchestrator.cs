@@ -10,6 +10,7 @@ namespace RobotArena.Session
         private readonly ISessionBotFactory botFactory;
         private readonly IPlayerRecovery playerRecovery;
         private readonly SessionResultTracker resultTracker;
+        private readonly PauseCoordinator pauseCoordinator;
         private int currentWaveIndex;
         private float spawnElapsed;
         private float timeUntilNextSpawn;
@@ -19,7 +20,7 @@ namespace RobotArena.Session
             SessionPlan plan,
             ISessionBotFactory botFactory,
             IPlayerRecovery playerRecovery)
-            : this(plan, botFactory, playerRecovery, null)
+            : this(plan, botFactory, playerRecovery, null, null)
         {
         }
 
@@ -28,11 +29,22 @@ namespace RobotArena.Session
             ISessionBotFactory botFactory,
             IPlayerRecovery playerRecovery,
             ISessionBestTimeStore bestTimeStore)
+            : this(plan, botFactory, playerRecovery, bestTimeStore, null)
+        {
+        }
+
+        public SessionOrchestrator(
+            SessionPlan plan,
+            ISessionBotFactory botFactory,
+            IPlayerRecovery playerRecovery,
+            ISessionBestTimeStore bestTimeStore,
+            PauseCoordinator pauseCoordinator)
         {
             this.plan = plan ?? throw new ArgumentNullException(nameof(plan));
             this.botFactory = botFactory ?? throw new ArgumentNullException(nameof(botFactory));
             this.playerRecovery = playerRecovery ?? throw new ArgumentNullException(nameof(playerRecovery));
             resultTracker = new SessionResultTracker(bestTimeStore);
+            this.pauseCoordinator = pauseCoordinator ?? new PauseCoordinator();
         }
 
         public event Action<SessionState> StateChanged;
@@ -72,6 +84,11 @@ namespace RobotArena.Session
             if (elapsedSeconds < 0f)
             {
                 throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
+            }
+
+            if (pauseCoordinator.IsPaused)
+            {
+                return;
             }
 
             if (elapsedSeconds == 0f)

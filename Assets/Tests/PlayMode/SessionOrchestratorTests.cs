@@ -278,6 +278,34 @@ namespace RobotArena.Session.Tests
             Assert.That(session.ActiveTime, Is.EqualTo(2f).Within(0.0001f));
         }
 
+        [Test]
+        public void Combined_pause_sources_stop_active_time_until_all_sources_are_released()
+        {
+            var pauseCoordinator = new PauseCoordinator();
+            var session = new SessionOrchestrator(
+                new SessionPlan(new[] { new WaveSchedule(10f, 1f, 5) }, 5f, 0.20f),
+                new FakeBotFactory(),
+                new FakePlayerRecovery(),
+                null,
+                pauseCoordinator);
+
+            session.StartSession(new[] { new BotId(308) });
+            session.Advance(1f);
+            pauseCoordinator.SetSource(PauseSource.Focus, true);
+            pauseCoordinator.SetSource(PauseSource.Advertisement, true);
+
+            session.Advance(10f);
+            Assert.That(session.ActiveTime, Is.EqualTo(1f));
+
+            pauseCoordinator.SetSource(PauseSource.Focus, false);
+            session.Advance(10f);
+            Assert.That(session.ActiveTime, Is.EqualTo(1f));
+
+            pauseCoordinator.SetSource(PauseSource.Advertisement, false);
+            session.Advance(1f);
+            Assert.That(session.ActiveTime, Is.EqualTo(2f));
+        }
+
         [UnityTest]
         public IEnumerator Disabling_a_live_bot_does_not_unregister_it_but_destroying_it_does()
         {

@@ -46,6 +46,11 @@ public class PlayerShooting : MonoBehaviour
 
     void Update()
     {
+        if (PauseMenu.GameIsPaused)
+        {
+            return;
+        }
+
         if (isPlayingAnimation) return;
 
         // --- Обычный выстрел ---

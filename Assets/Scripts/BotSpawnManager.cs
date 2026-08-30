@@ -24,6 +24,7 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     private readonly List<Transform> spawnPoints = new List<Transform>();
     private SessionOrchestrator session;
     private PlayerHP playerHealth;
+    private PauseMenu pauseMenu;
 
     public SessionState State => session?.State ?? SessionState.NotStarted;
     public SessionResult? Result => session?.Result;
@@ -36,11 +37,13 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     {
         CollectSpawnPoints();
         playerHealth = FindObjectOfType<PlayerHP>();
+        pauseMenu = FindObjectOfType<PauseMenu>();
         session = new SessionOrchestrator(
             CreateSessionPlan(),
             this,
             this,
-            new PlayerPrefsSessionBestTimeStore());
+            new PlayerPrefsSessionBestTimeStore(),
+            pauseMenu?.PauseCoordinator);
         session.StateChanged += OnSessionStateChanged;
 
         SessionBotRegistration[] placedBots = FindObjectsOfType<SessionBotRegistration>();
