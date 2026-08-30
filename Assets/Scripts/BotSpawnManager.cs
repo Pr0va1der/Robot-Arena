@@ -32,6 +32,10 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     public int LiveBotCount => session?.LiveBotCount ?? 0;
     public int CurrentWaveNumber => session?.CurrentWaveNumber ?? 0;
     public int TotalWaves => session?.TotalWaves ?? waveConfigurations?.Count ?? 0;
+    public float SpawnTimeRemaining => session?.SpawnTimeRemaining ?? 0f;
+    public float IntermissionTimeRemaining => session?.IntermissionTimeRemaining ?? 0f;
+
+    public event System.Action<SessionState> SessionStateChanged;
 
     private void Start()
     {
@@ -211,9 +215,16 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
 
     private void OnSessionStateChanged(SessionState state)
     {
+        SessionStateChanged?.Invoke(state);
+
         if ((state == SessionState.Won || state == SessionState.Lost) && spawnTimerText != null)
         {
             spawnTimerText.gameObject.SetActive(false);
+        }
+
+        if (DesktopArenaUi.Instance != null)
+        {
+            return;
         }
 
         if (state == SessionState.Won)

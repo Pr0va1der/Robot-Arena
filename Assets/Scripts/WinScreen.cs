@@ -14,7 +14,16 @@ public class WinScreen : MonoBehaviour
 
     void Start()
     {
-        winScreenUI.SetActive(false);
+        if (winScreenUI != null)
+        {
+            winScreenUI.SetActive(false);
+        }
+
+        if (DesktopArenaUi.Instance != null)
+        {
+            return;
+        }
+
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
     }
@@ -25,7 +34,10 @@ public class WinScreen : MonoBehaviour
         isWin = true;
 
         Time.timeScale = 0f;
-        winScreenUI.SetActive(true);
+        if (winScreenUI != null)
+        {
+            winScreenUI.SetActive(true);
+        }
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
@@ -39,7 +51,10 @@ public class WinScreen : MonoBehaviour
 
     public void HideWinScreen()
     {
-        winScreenUI.SetActive(false);
+        if (winScreenUI != null)
+        {
+            winScreenUI.SetActive(false);
+        }
         Time.timeScale = 1f;
 
         Cursor.visible = false;

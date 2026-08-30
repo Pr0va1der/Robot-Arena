@@ -23,6 +23,11 @@ namespace RobotArena.Session
         public PauseSource ActiveSources => activeSources;
         public bool RequiresPointerLockClick => requiresPointerLockClick;
 
+        public void RequirePointerLockClick()
+        {
+            requiresPointerLockClick = true;
+        }
+
         public void SetSource(PauseSource source, bool isActive)
         {
             ValidateSource(source);

@@ -11,6 +11,9 @@ public class PlayerHP : MonoBehaviour, IDamageable
     public event Action<float, float> OnHealthChanged;
     public event Action Died;
 
+    public float CurrentHealth => currentHealth;
+    public float MaxHealth => maxHealth;
+
     public DeathScreen deathScreen;
     private bool isDead;
 

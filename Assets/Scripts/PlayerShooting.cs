@@ -12,6 +12,7 @@ public class PlayerShooting : MonoBehaviour
 
     [Header("Ulti Settings")]
     public float ultimateForce = 15f;
+    [Min(0f)] public float ultimateCooldown = 8f;
     public Transform cameraTransform;
     public GameObject physicsBody;
 
@@ -24,8 +25,12 @@ public class PlayerShooting : MonoBehaviour
     private Rigidbody rb;
     private bool isPlayingAnimation = false;
     private float nextFireTime = 0f;
+    private float nextUltimateTime = 0f;
 
-    void Start()
+    public float UltimateCooldownRemaining => Mathf.Max(0f, nextUltimateTime - Time.time);
+    public bool IsUltimateReady => UltimateCooldownRemaining <= 0f;
+
+    private void Start()
     {
         animator = GetComponent<Animator>();
 
@@ -44,17 +49,24 @@ public class PlayerShooting : MonoBehaviour
         }
     }
 
-    void Update()
+    private void Update()
     {
         if (PauseMenu.GameIsPaused)
         {
             return;
         }
 
+        if (PauseMenu.PointerLockGestureConsumed)
+        {
+            return;
+        }
+
         if (isPlayingAnimation) return;
 
+        IGameplayInputActions inputActions = GameplayInputActions.Current;
+
         // --- Обычный выстрел ---
-        if (Input.GetMouseButtonDown(0) && Time.time >= nextFireTime)
+        if (inputActions.FirePressed && Time.time >= nextFireTime)
         {
             PlayAnimation("Shoot");
             FireBullets();
@@ -62,11 +74,12 @@ public class PlayerShooting : MonoBehaviour
         }
 
         // --- Ульта ---
-        if (Input.GetKeyDown(KeyCode.Q))
+        if (inputActions.UltimatePressed && IsUltimateReady)
         {
             PlayAnimation("Ultimate");
             ApplyUltimateForce();
             SpawnUltimateEffect(); 
+            nextUltimateTime = Time.time + ultimateCooldown;
         }
     }
 

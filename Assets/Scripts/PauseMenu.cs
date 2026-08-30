@@ -2,9 +2,11 @@ using RobotArena.Session;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+[DefaultExecutionOrder(-100)]
 public class PauseMenu : MonoBehaviour
 {
     public static bool GameIsPaused { get; private set; }
+    public static bool PointerLockGestureConsumed { get; private set; }
 
     [Header("UI Elements")]
     public GameObject pauseMenuUI;
@@ -13,14 +15,31 @@ public class PauseMenu : MonoBehaviour
     private readonly PauseCoordinator pauseCoordinator = new PauseCoordinator();
     private bool focusWasLost;
     private bool applicationWasPaused;
+    private bool tutorialMode;
+    private bool resultMode;
 
     public PauseCoordinator PauseCoordinator => pauseCoordinator;
     public bool IsPaused => pauseCoordinator.IsPaused;
     public PauseSource ActivePauseSources => pauseCoordinator.ActiveSources;
+    public bool RequiresPointerLockClick => pauseCoordinator.RequiresPointerLockClick;
+    public bool IsTutorialMode => tutorialMode;
+    public bool IsResultMode => resultMode;
 
     private void Awake()
     {
         pauseCoordinator.PauseStateChanged += OnPauseStateChanged;
+        pauseCoordinator.RequirePointerLockClick();
+
+        Canvas canvas = GetComponent<Canvas>();
+        DesktopCanvasLayout.Ensure(canvas);
+
+        DesktopArenaUi desktopUi = GetComponent<DesktopArenaUi>();
+        if (desktopUi == null)
+        {
+            desktopUi = gameObject.AddComponent<DesktopArenaUi>();
+        }
+
+        desktopUi.Bind(this);
     }
 
     private void Start()
@@ -40,17 +59,64 @@ public class PauseMenu : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
+        PointerLockGestureConsumed = false;
+
+        if (tutorialMode || resultMode)
+        {
+            return;
+        }
+
+        IGameplayInputActions inputActions = GameplayInputActions.Current;
+
+        if (inputActions.PausePressed)
         {
             ToggleUserPause();
         }
 
-        if (!pauseCoordinator.IsPaused &&
-            Input.GetMouseButtonDown(0) &&
-            pauseCoordinator.TryConsumePointerLockRequest())
+        if (!pauseCoordinator.IsPaused && inputActions.PointerGesturePressed)
         {
-            LockPointer();
+            TryAcquirePointerLockFromUserGesture();
         }
+    }
+
+    public void ConfigureUi(GameObject pauseUi, GameObject gameplayUi)
+    {
+        pauseMenuUI = pauseUi;
+        ingameUI = gameplayUi;
+        UpdatePauseUi();
+    }
+
+    public void SetTutorialMode(bool isActive)
+    {
+        tutorialMode = isActive;
+        UpdatePauseUi();
+    }
+
+    public void SetResultMode(bool isActive)
+    {
+        resultMode = isActive;
+        UpdatePauseUi();
+    }
+
+    public void RequirePointerLockClick()
+    {
+        pauseCoordinator.RequirePointerLockClick();
+        if (!pauseCoordinator.IsPaused)
+        {
+            UnlockPointer();
+        }
+    }
+
+    public bool TryAcquirePointerLockFromUserGesture()
+    {
+        if (!pauseCoordinator.TryConsumePointerLockRequest())
+        {
+            return false;
+        }
+
+        LockPointer();
+        PointerLockGestureConsumed = true;
+        return true;
     }
 
     public void SetPauseSource(PauseSource source, bool isActive)
@@ -60,6 +126,7 @@ public class PauseMenu : MonoBehaviour
 
     public void Resume()
     {
+        pauseCoordinator.RequirePointerLockClick();
         SetPauseSource(PauseSource.User, false);
     }
 
@@ -75,7 +142,13 @@ public class PauseMenu : MonoBehaviour
 
     private void ToggleUserPause()
     {
-        SetPauseSource(PauseSource.User, !pauseCoordinator.IsSourceActive(PauseSource.User));
+        if (pauseCoordinator.IsSourceActive(PauseSource.User))
+        {
+            Resume();
+            return;
+        }
+
+        SetPauseSource(PauseSource.User, true);
     }
 
     private void OnApplicationFocus(bool hasFocus)
@@ -116,12 +189,12 @@ public class PauseMenu : MonoBehaviour
         bool userPaused = pauseCoordinator.IsSourceActive(PauseSource.User);
         if (pauseMenuUI != null)
         {
-            pauseMenuUI.SetActive(userPaused);
+            pauseMenuUI.SetActive(userPaused && !tutorialMode && !resultMode);
         }
 
         if (ingameUI != null)
         {
-            ingameUI.SetActive(!userPaused);
+            ingameUI.SetActive(!userPaused && !tutorialMode && !resultMode);
         }
     }
 
@@ -164,14 +237,16 @@ public class PauseMenu : MonoBehaviour
     {
         Time.timeScale = 1f;
         AudioListener.pause = false;
-        SceneManager.LoadScene(0);
+        SceneManager.LoadScene("Title Screen");
     }
 
     private void OnDestroy()
     {
         pauseCoordinator.PauseStateChanged -= OnPauseStateChanged;
         GameIsPaused = false;
+        PointerLockGestureConsumed = false;
         Time.timeScale = 1f;
         AudioListener.pause = false;
+        UnlockPointer();
     }
 }

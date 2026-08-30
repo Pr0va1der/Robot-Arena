@@ -15,20 +15,23 @@ public class PlayerMove : MonoBehaviour
     private float groundedTimer = 0f;
     private Rigidbody _rb;
 
-    void Start()
+    private void Start()
     {
         _rb = GetComponent<Rigidbody>();
         _rb.interpolation = RigidbodyInterpolation.Interpolate;
         _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-        Cursor.lockState = CursorLockMode.Locked;
-
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
     }
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
+        if (PauseMenu.GameIsPaused)
+        {
+            return;
+        }
+
         groundedTimer -= Time.fixedDeltaTime;
         _isGrounded = groundedTimer > 0f;
 
@@ -38,8 +41,10 @@ public class PlayerMove : MonoBehaviour
 
     private void MovementLogic()
     {
-        float moveHorizontal = Input.GetAxis("Horizontal");
-        float moveVertical = Input.GetAxis("Vertical");
+        IGameplayInputActions inputActions = GameplayInputActions.Current;
+        Vector2 movementInput = inputActions.Movement;
+        float moveHorizontal = movementInput.x;
+        float moveVertical = movementInput.y;
 
         if (cameraTransform == null) return;
 
@@ -52,7 +57,7 @@ public class PlayerMove : MonoBehaviour
 
         Vector3 movement = (cameraForward * moveVertical + cameraRight * moveHorizontal).normalized;
 
-        if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+        if (inputActions.BrakeHeld)
         {
             _rb.velocity = Vector3.Lerp(_rb.velocity, Vector3.zero, Time.fixedDeltaTime * BrakeForce);
             _rb.angularVelocity = Vector3.zero;
@@ -63,19 +68,19 @@ public class PlayerMove : MonoBehaviour
                 _rb.AddForce(movement * Speed, ForceMode.Acceleration);
 
             Quaternion targetRotation = Quaternion.LookRotation(movement, Vector3.up);
-            _rb.rotation = Quaternion.Slerp(_rb.rotation, targetRotation, 10f * Time.deltaTime);
+            _rb.rotation = Quaternion.Slerp(_rb.rotation, targetRotation, 10f * Time.fixedDeltaTime);
         }
     }
 
     private void JumpLogic()
     {
-        if (Input.GetAxis("Jump") > 0 && _isGrounded)
+        if (GameplayInputActions.Current.JumpHeld && _isGrounded)
         {
             _rb.AddForce(Vector3.up * JumpForce);
         }
     }
 
-    void OnCollisionStay(Collision collision)
+    private void OnCollisionStay(Collision collision)
     {
         if (collision.gameObject.CompareTag("Ground"))
             groundedTimer = 0.1f;

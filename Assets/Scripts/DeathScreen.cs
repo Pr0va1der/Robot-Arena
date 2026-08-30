@@ -14,7 +14,16 @@ public class DeathScreen : MonoBehaviour
 
     void Start()
     {
-        deathScreenUI.SetActive(false);
+        if (deathScreenUI != null)
+        {
+            deathScreenUI.SetActive(false);
+        }
+
+        if (DesktopArenaUi.Instance != null)
+        {
+            return;
+        }
+
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
     }
@@ -26,7 +35,10 @@ public class DeathScreen : MonoBehaviour
         isDead = true;
 
         Time.timeScale = 0f; // Пауза времени
-        deathScreenUI.SetActive(true);
+        if (deathScreenUI != null)
+        {
+            deathScreenUI.SetActive(true);
+        }
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
@@ -41,7 +53,10 @@ public class DeathScreen : MonoBehaviour
     // Скрыть экран (может быть использовано, если ресет)
     public void HideDeathScreen()
     {
-        deathScreenUI.SetActive(false);
+        if (deathScreenUI != null)
+        {
+            deathScreenUI.SetActive(false);
+        }
         Time.timeScale = 1f;
 
         Cursor.visible = false;
