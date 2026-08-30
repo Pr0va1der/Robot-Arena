@@ -1,0 +1,10 @@
+{
+  "name": "RobotArena.Session.Tests",
+  "rootNamespace": "RobotArena.Session.Tests",
+  "references": [
+    "RobotArena.Session"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

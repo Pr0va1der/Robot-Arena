@@ -1,59 +1,140 @@
-﻿using System.Collections;
 using System.Collections.Generic;
+using RobotArena.Session;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 
-public class BotSpawnManager : MonoBehaviour
+public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotRegistry
 {
-    [Header("Initial bots (already on map)")]
-    public int initialBotsOnMap = 11;
-
-    [Header("Max bots on map")]
+    [Header("Spawn Settings")]
+    [FormerlySerializedAs("waveDuration")]
+    public float spawnDuration = 20f;
+    public float spawnInterval = 2f;
     public int maxBotsOnMap = 5;
 
     [Header("Bots")]
     public GameObject botPrefab;
-
-    [Header("Spawn Points Root")]
     public Transform spawnPointsRoot;
-
-    [Header("Wave Settings")]
-    public float waveDuration = 20f;
-    public float spawnInterval = 2f;
 
     [Header("UI")]
     public TextMeshProUGUI botsCounterText;
-    public TextMeshProUGUI waveTimerText;
-
-    private List<Transform> spawnPoints = new List<Transform>();
-    private int currentBotsOnMap;
-    private bool waveActive = false;
-    private bool waveCompleted = false;
-
-    private Coroutine waveTimerCoroutine;
-    private Coroutine spawnCoroutine;
-
+    [FormerlySerializedAs("waveTimerText")]
+    public TextMeshProUGUI spawnTimerText;
     public GameObject winScreen;
 
-    void Start()
+    private readonly List<Transform> spawnPoints = new List<Transform>();
+    private SessionOrchestrator session;
+    private PlayerHP playerHealth;
+
+    public SessionState State => session?.State ?? SessionState.NotStarted;
+    public int LiveBotCount => session?.LiveBotCount ?? 0;
+
+    private void Start()
     {
-        currentBotsOnMap = initialBotsOnMap;
-        Debug.Log($"🧮 Initial bots on map: {currentBotsOnMap}");
-
-        if (waveTimerText != null)
-            waveTimerText.gameObject.SetActive(false);
-
         CollectSpawnPoints();
+        session = new SessionOrchestrator(
+            new WaveSchedule(spawnDuration, spawnInterval, maxBotsOnMap),
+            this);
+        session.StateChanged += OnSessionStateChanged;
+
+        SessionBotRegistration[] placedBots = FindObjectsOfType<SessionBotRegistration>();
+        var initialBots = new List<BotId>(placedBots.Length);
+        foreach (SessionBotRegistration bot in placedBots)
+        {
+            bot.Connect(this);
+            initialBots.Add(bot.Id);
+        }
+
+        session.StartSession(initialBots);
+        playerHealth = FindObjectOfType<PlayerHP>();
+        if (playerHealth != null)
+        {
+            playerHealth.Died += OnPlayerDied;
+        }
+
+        if (spawnTimerText != null)
+        {
+            spawnTimerText.gameObject.SetActive(true);
+        }
     }
 
-    void CollectSpawnPoints()
+    private void Update()
+    {
+        session?.Advance(Time.deltaTime);
+
+        if (botsCounterText != null)
+        {
+            botsCounterText.text = $"Ботов осталось: {LiveBotCount}";
+        }
+
+        if (spawnTimerText != null && State == SessionState.Spawning)
+        {
+            spawnTimerText.text = $"До конца появления: {Mathf.CeilToInt(session.SpawnTimeRemaining)}";
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (session != null)
+        {
+            session.StateChanged -= OnSessionStateChanged;
+        }
+
+        if (playerHealth != null)
+        {
+            playerHealth.Died -= OnPlayerDied;
+        }
+    }
+
+    public bool RegisterBot(SessionBotRegistration bot)
+    {
+        return bot != null && session != null && session.RegisterBot(bot.Id);
+    }
+
+    public bool UnregisterBot(SessionBotRegistration bot)
+    {
+        return bot != null && session != null && session.RemoveBot(bot.Id);
+    }
+
+    public bool TryCreateBot(out BotId botId)
+    {
+        botId = default;
+        if (botPrefab == null || spawnPoints.Count == 0)
+        {
+            return false;
+        }
+
+        Transform point = spawnPoints[Random.Range(0, spawnPoints.Count)];
+        GameObject bot = Instantiate(botPrefab, point.position, point.rotation);
+        SessionBotRegistration registration = bot.GetComponentInChildren<SessionBotRegistration>();
+        if (registration == null)
+        {
+            registration = bot.AddComponent<SessionBotRegistration>();
+        }
+
+        registration.Connect(this);
+        botId = registration.Id;
+
+        Animator animator = bot.GetComponentInChildren<Animator>();
+        if (animator != null)
+        {
+            animator.SetBool("isPlayerVisible", true);
+        }
+
+        return true;
+    }
+
+    public void OnPlayerDied()
+    {
+        session?.DefeatPlayer();
+    }
+
+    private void CollectSpawnPoints()
     {
         spawnPoints.Clear();
-
         if (spawnPointsRoot == null)
         {
-            Debug.LogError("❌ SpawnPointsRoot is NOT assigned!");
+            Debug.LogError("SpawnPointsRoot is not assigned.");
             return;
         }
 
@@ -61,130 +142,34 @@ public class BotSpawnManager : MonoBehaviour
         {
             spawnPoints.Add(child);
         }
-
-        Debug.Log($"📍 Spawn points collected: {spawnPoints.Count}");
     }
 
-    public void OnBotDied()
+    private void OnSessionStateChanged(SessionState state)
     {
-        currentBotsOnMap = Mathf.Max(0, currentBotsOnMap - 1);
-        Debug.Log($"💀 Bot died. Current bots on map: {currentBotsOnMap}");
-
-        if (currentBotsOnMap == 0 && !waveActive && !waveCompleted)
+        if (state != SessionState.Spawning && spawnTimerText != null)
         {
-            StartWave();
+            spawnTimerText.gameObject.SetActive(false);
+        }
+
+        if (state == SessionState.Won)
+        {
+            ShowVictoryScreen();
+        }
+        else if (state == SessionState.Lost && playerHealth != null && playerHealth.deathScreen != null)
+        {
+            playerHealth.deathScreen.ShowDeathScreen();
         }
     }
 
-    void StartWave()
+    private void ShowVictoryScreen()
     {
-        if (waveActive)
-            return;
-
-        waveActive = true;
-        Debug.Log("🌊 WAVE STARTED");
-
-        waveTimerCoroutine = StartCoroutine(WaveTimer());
-        spawnCoroutine = StartCoroutine(SpawnLoop());
-    }
-
-    IEnumerator WaveTimer()
-    {
-        float timeLeft = waveDuration;
-
-        if (waveTimerText != null)
-            waveTimerText.gameObject.SetActive(true);
-
-        while (timeLeft > 0f)
-        {
-            int seconds = Mathf.CeilToInt(timeLeft);
-
-            if (waveTimerText != null)
-                waveTimerText.text = $"До конца волны: {seconds}";
-
-            Debug.Log($"⏳ Wave time left: {seconds} sec");
-
-            yield return new WaitForSeconds(1f);
-            timeLeft -= 1f;
-        }
-
-        waveActive = false;
-        waveCompleted = true;
-
-        if (waveTimerText != null)
-            waveTimerText.gameObject.SetActive(false);
-
-        Debug.Log("⏱️ WAVE ENDED — no more spawns");
-        ShowVictoryScreen();
-    }
-
-    void ShowVictoryScreen()
-    {
-        Debug.Log("🏆 VICTORY!");
-
         if (winScreen != null)
+        {
             winScreen.SetActive(true);
+        }
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
         Time.timeScale = 0f;
-    }
-
-
-    IEnumerator SpawnLoop()
-    {
-
-        while (waveActive)
-        {
-            TrySpawnBot();
-            yield return new WaitForSeconds(spawnInterval);
-        }
-    }
-
-    void TrySpawnBot()
-    {
-
-        if (!waveActive)
-            return;
-
-        if (waveCompleted)
-            return;
-
-        if (currentBotsOnMap >= maxBotsOnMap)
-        {
-            Debug.Log("🚫 Spawn skipped — max bots on map reached");
-            return;
-        }
-
-        if (botPrefab == null || spawnPoints.Count == 0)
-            return;
-
-        Transform point = spawnPoints[Random.Range(0, spawnPoints.Count)];
-        GameObject bot = Instantiate(botPrefab, point.position, point.rotation);
-
-        currentBotsOnMap++;
-        Debug.Log($"🤖 Bot spawned at {point.name}. Current bots: {currentBotsOnMap}");
-
-        Animator animator = bot.GetComponentInChildren<Animator>();
-        if (animator != null)
-        {
-            animator.SetBool("isPlayerVisible", true);
-            Debug.Log("🔫 Bot switched to gunsUp state");
-        }
-        else
-        {
-            Debug.LogWarning("⚠️ Animator not found on spawned bot");
-        }
-    }
-
-    private void FixedUpdate()
-    {
-        UpdateBotsCounter();
-    }
-
-    void UpdateBotsCounter()
-    {
-        if (botsCounterText != null)
-            botsCounterText.text = $"Ботов осталось: {currentBotsOnMap}";
     }
 }

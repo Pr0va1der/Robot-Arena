@@ -1,11 +1,20 @@
 using System.Collections;
 using System.Collections.Generic;
+using RobotArena.Session;
 using UnityEngine;
 
 public class BOBotPatrol : MonoBehaviour
 {
-    [Header("Список точек патрулирования")]
+    [Header("РЎРїРёСЃРѕРє С‚РѕС‡РµРє РїР°С‚СЂСѓР»РёСЂРѕРІР°РЅРёСЏ")]
     public Transform routeParent;
+
+    private void Awake()
+    {
+        if (GetComponent<SessionBotRegistration>() == null)
+        {
+            gameObject.AddComponent<SessionBotRegistration>();
+        }
+    }
 
     public Transform[] GetPoints()
     {

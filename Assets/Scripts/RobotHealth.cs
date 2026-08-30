@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class RobotHealth : MonoBehaviour, IDamageable
 {
@@ -16,6 +16,7 @@ public class RobotHealth : MonoBehaviour, IDamageable
     public float ultiEffectLifetime = 2f;
 
     private Animator animator;
+    private bool isDead;
 
 
 
@@ -28,6 +29,11 @@ public class RobotHealth : MonoBehaviour, IDamageable
 
     public void TakeDamage(float damage)
     {
+        if (isDead)
+        {
+            return;
+        }
+
         currentHealth -= damage;
         Debug.Log($"{gameObject.name} получил урон: {damage}. Осталось здоровья: {currentHealth}");
 
@@ -44,13 +50,10 @@ public class RobotHealth : MonoBehaviour, IDamageable
 
     private void Die()
     {
+        isDead = true;
         Debug.Log($"{gameObject.name} уничтожен!");
 
-        BotSpawnManager manager = FindObjectOfType<BotSpawnManager>();
-        if (manager != null)
-            manager.OnBotDied();
-
-        Destroy(objectToDestroy);
+        Destroy(objectToDestroy != null ? objectToDestroy : gameObject);
         SpawnUltimateEffect();
     }
 

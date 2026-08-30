@@ -1,4 +1,4 @@
-﻿
+
 
 using UnityEngine;
 using System;
@@ -9,8 +9,10 @@ public class PlayerHP : MonoBehaviour, IDamageable
     private float currentHealth;
 
     public event Action<float, float> OnHealthChanged;
+    public event Action Died;
 
     public DeathScreen deathScreen;
+    private bool isDead;
 
     void Start()
     {
@@ -20,6 +22,11 @@ public class PlayerHP : MonoBehaviour, IDamageable
 
     public void TakeDamage(float damage)
     {
+        if (isDead)
+        {
+            return;
+        }
+
         currentHealth -= damage;
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
 
@@ -42,7 +49,8 @@ public class PlayerHP : MonoBehaviour, IDamageable
 
     void Die()
     {
+        isDead = true;
         Debug.Log("💀 Игрок уничтожен!");
-        deathScreen.ShowDeathScreen();
+        Died?.Invoke();
     }
 }
