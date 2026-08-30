@@ -9,6 +9,7 @@ namespace RobotArena.Session
         private readonly SessionPlan plan;
         private readonly ISessionBotFactory botFactory;
         private readonly IPlayerRecovery playerRecovery;
+        private readonly SessionResultTracker resultTracker;
         private int currentWaveIndex;
         private float spawnElapsed;
         private float timeUntilNextSpawn;
@@ -18,10 +19,20 @@ namespace RobotArena.Session
             SessionPlan plan,
             ISessionBotFactory botFactory,
             IPlayerRecovery playerRecovery)
+            : this(plan, botFactory, playerRecovery, null)
+        {
+        }
+
+        public SessionOrchestrator(
+            SessionPlan plan,
+            ISessionBotFactory botFactory,
+            IPlayerRecovery playerRecovery,
+            ISessionBestTimeStore bestTimeStore)
         {
             this.plan = plan ?? throw new ArgumentNullException(nameof(plan));
             this.botFactory = botFactory ?? throw new ArgumentNullException(nameof(botFactory));
             this.playerRecovery = playerRecovery ?? throw new ArgumentNullException(nameof(playerRecovery));
+            resultTracker = new SessionResultTracker(bestTimeStore);
         }
 
         public event Action<SessionState> StateChanged;
@@ -32,6 +43,8 @@ namespace RobotArena.Session
         public int TotalWaves => plan.Waves.Count;
         public WaveSchedule CurrentWave => plan.Waves[currentWaveIndex];
         public float ActiveTime { get; private set; }
+        public SessionResult? Result => resultTracker.Result;
+        public float? BestTime => resultTracker.BestTime;
         public float SpawnTimeRemaining => Math.Max(0f, CurrentWave.SpawnDuration - spawnElapsed);
         public float IntermissionTimeRemaining => Math.Max(0f, plan.IntermissionDuration - intermissionElapsed);
 
@@ -42,6 +55,7 @@ namespace RobotArena.Session
                 throw new ArgumentNullException(nameof(initialBots));
             }
 
+            resultTracker.BeginSession();
             liveBots.Clear();
             foreach (BotId bot in initialBots)
             {
@@ -60,18 +74,71 @@ namespace RobotArena.Session
                 throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
             }
 
-            if (State == SessionState.Spawning)
+            if (elapsedSeconds == 0f)
             {
-                ActiveTime += elapsedSeconds;
-                AdvanceSpawning(elapsedSeconds);
+                if (State == SessionState.Spawning)
+                {
+                    AdvanceSpawning(0f);
+                }
+                else if (State == SessionState.Intermission && plan.IntermissionDuration == 0f)
+                {
+                    AdvanceIntermission(0f);
+                }
+
+                return;
             }
-            else if (State == SessionState.Clearing)
+
+            float remainingSeconds = elapsedSeconds;
+            while (remainingSeconds > 0f)
             {
-                ActiveTime += elapsedSeconds;
-            }
-            else if (State == SessionState.Intermission)
-            {
-                AdvanceIntermission(elapsedSeconds);
+                if (State == SessionState.Spawning)
+                {
+                    float timeUntilSpawnEnds = CurrentWave.SpawnDuration - spawnElapsed;
+                    if (timeUntilSpawnEnds <= 0f)
+                    {
+                        SessionState stateBeforeTransition = State;
+                        AdvanceSpawning(0f);
+                        if (State == stateBeforeTransition)
+                        {
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    float activeStep = Math.Min(remainingSeconds, timeUntilSpawnEnds);
+                    ActiveTime += activeStep;
+                    AdvanceSpawning(activeStep);
+                    remainingSeconds -= activeStep;
+                }
+                else if (State == SessionState.Clearing)
+                {
+                    ActiveTime += remainingSeconds;
+                    remainingSeconds = 0f;
+                }
+                else if (State == SessionState.Intermission)
+                {
+                    float timeUntilIntermissionEnds = plan.IntermissionDuration - intermissionElapsed;
+                    if (timeUntilIntermissionEnds <= 0f)
+                    {
+                        SessionState stateBeforeTransition = State;
+                        AdvanceIntermission(0f);
+                        if (State == stateBeforeTransition)
+                        {
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    float intermissionStep = Math.Min(remainingSeconds, timeUntilIntermissionEnds);
+                    AdvanceIntermission(intermissionStep);
+                    remainingSeconds -= intermissionStep;
+                }
+                else
+                {
+                    remainingSeconds = 0f;
+                }
             }
         }
 
@@ -106,7 +173,7 @@ namespace RobotArena.Session
                 State == SessionState.Clearing ||
                 State == SessionState.Intermission)
             {
-                SetState(SessionState.Lost);
+                CompleteSession(SessionOutcome.Lost, SessionState.Lost);
             }
         }
 
@@ -141,35 +208,36 @@ namespace RobotArena.Session
 
         private void AdvanceIntermission(float elapsedSeconds)
         {
-            float totalIntermissionElapsed = intermissionElapsed + elapsedSeconds;
-            if (totalIntermissionElapsed < plan.IntermissionDuration)
+            intermissionElapsed = Math.Min(
+                plan.IntermissionDuration,
+                intermissionElapsed + elapsedSeconds);
+            if (intermissionElapsed < plan.IntermissionDuration)
             {
-                intermissionElapsed = totalIntermissionElapsed;
                 return;
             }
 
-            intermissionElapsed = plan.IntermissionDuration;
             currentWaveIndex++;
             BeginSpawning();
-
-            float nextWaveElapsed = totalIntermissionElapsed - plan.IntermissionDuration;
-            if (nextWaveElapsed > 0f)
-            {
-                Advance(nextWaveElapsed);
-            }
         }
 
         private void CompleteWave()
         {
             if (currentWaveIndex == plan.Waves.Count - 1)
             {
-                SetState(SessionState.Won);
+                CompleteSession(SessionOutcome.Won, SessionState.Won);
                 return;
             }
 
             playerRecovery.RestoreHealthFraction(plan.HealthRestoreFraction);
             intermissionElapsed = 0f;
             SetState(SessionState.Intermission);
+        }
+
+        private void CompleteSession(SessionOutcome outcome, SessionState state)
+        {
+            var result = new SessionResult(outcome, CurrentWaveNumber, ActiveTime);
+            resultTracker.Complete(result);
+            SetState(state);
         }
 
         private void BeginSpawning()

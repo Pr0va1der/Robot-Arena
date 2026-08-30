@@ -1,12 +1,16 @@
+using RobotArena.Session;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class WinScreen : MonoBehaviour
 {
-    [Header("—Ò˚ÎÍË UI")]
+    [Header("–°—Å—ã–ª–∫–∏ UI")]
     public GameObject winScreenUI;
 
     private bool isWin = false;
+
+    public SessionResult? Result { get; private set; }
+    public float? BestTime { get; private set; }
 
     void Start()
     {
@@ -25,6 +29,12 @@ public class WinScreen : MonoBehaviour
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
+    }
+
+    public void SetResult(SessionResult result, float? bestTime)
+    {
+        Result = result;
+        BestTime = bestTime;
     }
 
     public void HideWinScreen()

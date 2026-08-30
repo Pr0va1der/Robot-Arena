@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using RobotArena.Session;
 using UnityEngine.SceneManagement;
 
 public class DeathScreen : MonoBehaviour
@@ -7,6 +8,9 @@ public class DeathScreen : MonoBehaviour
     public GameObject deathScreenUI; // Empty Object с картинкой и кнопками
 
     private bool isDead = false;
+
+    public SessionResult? Result { get; private set; }
+    public float? BestTime { get; private set; }
 
     void Start()
     {
@@ -26,6 +30,12 @@ public class DeathScreen : MonoBehaviour
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
+    }
+
+    public void SetResult(SessionResult result, float? bestTime)
+    {
+        Result = result;
+        BestTime = bestTime;
     }
 
     // Скрыть экран (может быть использовано, если ресет)

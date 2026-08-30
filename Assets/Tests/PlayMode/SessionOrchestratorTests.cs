@@ -70,7 +70,7 @@ namespace RobotArena.Session.Tests
                 new WaveSchedule(1f, 0.15f, 4, 0.90f, 0.90f),
                 new WaveSchedule(1f, 0.10f, 5, 0.85f, 0.85f)
             };
-            var factory = new RecordingBotFactory();
+            var factory = new BotCreationTrackingFactory();
             var session = new SessionOrchestrator(
                 new SessionPlan(waves, 5f, 0.20f),
                 factory,
@@ -169,6 +169,113 @@ namespace RobotArena.Session.Tests
             session.RemoveBot(bot);
 
             Assert.That(session.State, Is.EqualTo(SessionState.Lost));
+        }
+
+        [Test]
+        public void Won_session_exposes_result_and_saves_best_time()
+        {
+            var bestTimeStore = new FakeBestTimeStore();
+            var session = CreateSession(new FakeBotFactory(), bestTimeStore);
+            var bot = new BotId(302);
+
+            session.StartSession(new[] { bot });
+            session.Advance(1f);
+            session.RemoveBot(bot);
+
+            Assert.That(session.Result.HasValue, Is.True);
+            Assert.That(session.Result.Value.Outcome, Is.EqualTo(SessionOutcome.Won));
+            Assert.That(session.Result.Value.ReachedWave, Is.EqualTo(1));
+            Assert.That(session.Result.Value.ActiveTime, Is.EqualTo(1f));
+            Assert.That(session.BestTime, Is.EqualTo(1f));
+            Assert.That(bestTimeStore.SavedBestTimes, Is.EqualTo(new[] { 1f }));
+        }
+
+        [Test]
+        public void Lost_session_exposes_result_without_updating_best_time()
+        {
+            var bestTimeStore = new FakeBestTimeStore(12f);
+            var session = CreateSession(new FakeBotFactory(), bestTimeStore);
+            var bot = new BotId(303);
+
+            session.StartSession(new[] { bot });
+            session.Advance(2f);
+            session.DefeatPlayer();
+
+            Assert.That(session.Result.HasValue, Is.True);
+            Assert.That(session.Result.Value.Outcome, Is.EqualTo(SessionOutcome.Lost));
+            Assert.That(session.Result.Value.ReachedWave, Is.EqualTo(1));
+            Assert.That(session.Result.Value.ActiveTime, Is.EqualTo(2f));
+            Assert.That(session.BestTime, Is.EqualTo(12f));
+            Assert.That(bestTimeStore.SavedBestTimes, Is.EqualTo(new[] { 12f }));
+        }
+
+        [Test]
+        public void Best_time_survives_new_sessions_and_only_a_faster_win_replaces_it()
+        {
+            var bestTimeStore = new FakeBestTimeStore();
+            var session = CreateSession(new FakeBotFactory(), bestTimeStore);
+
+            session.StartSession(new[] { new BotId(304) });
+            session.Advance(2f);
+            session.RemoveBot(new BotId(304));
+
+            session.StartSession(new[] { new BotId(305) });
+            session.Advance(3f);
+            session.RemoveBot(new BotId(305));
+
+            Assert.That(session.BestTime, Is.EqualTo(2f));
+            Assert.That(bestTimeStore.SavedBestTimes, Is.EqualTo(new[] { 2f }));
+
+            session.StartSession(new[] { new BotId(306) });
+            session.Advance(1f);
+            session.RemoveBot(new BotId(306));
+
+            Assert.That(session.BestTime, Is.EqualTo(1f));
+            Assert.That(bestTimeStore.SavedBestTimes, Is.EqualTo(new[] { 2f, 1f }));
+        }
+
+        [Test]
+        public void New_session_orchestrator_loads_the_persisted_best_time()
+        {
+            var bestTimeStore = new FakeBestTimeStore();
+            var firstSession = CreateSession(new FakeBotFactory(), bestTimeStore);
+
+            firstSession.StartSession(new[] { new BotId(307) });
+            firstSession.Advance(4f);
+            firstSession.RemoveBot(new BotId(307));
+
+            var nextSession = CreateSession(new FakeBotFactory(), bestTimeStore);
+
+            Assert.That(nextSession.Result.HasValue, Is.False);
+            Assert.That(nextSession.BestTime, Is.EqualTo(4f));
+        }
+
+        [Test]
+        public void Active_time_excludes_intermission_and_time_after_victory_for_large_steps()
+        {
+            var session = new SessionOrchestrator(
+                new SessionPlan(
+                    new[]
+                    {
+                        new WaveSchedule(1f, 0.25f, 1),
+                        new WaveSchedule(1f, 0.25f, 1)
+                    },
+                    5f,
+                    0.20f),
+                new FakeBotFactory(),
+                new FakePlayerRecovery());
+
+            session.StartSession(Array.Empty<BotId>());
+            session.Advance(6.2f);
+
+            Assert.That(session.State, Is.EqualTo(SessionState.Spawning));
+            Assert.That(session.CurrentWaveNumber, Is.EqualTo(2));
+            Assert.That(session.ActiveTime, Is.EqualTo(1.2f).Within(0.0001f));
+
+            session.Advance(5f);
+
+            Assert.That(session.State, Is.EqualTo(SessionState.Won));
+            Assert.That(session.ActiveTime, Is.EqualTo(2f).Within(0.0001f));
         }
 
         [UnityTest]
@@ -280,12 +387,15 @@ namespace RobotArena.Session.Tests
             yield return null;
         }
 
-        private static SessionOrchestrator CreateSession(ISessionBotFactory factory)
+        private static SessionOrchestrator CreateSession(
+            ISessionBotFactory factory,
+            ISessionBestTimeStore bestTimeStore = null)
         {
             return new SessionOrchestrator(
                 new SessionPlan(new[] { new WaveSchedule(1f, 0.25f, 5) }, 5f, 0.20f),
                 factory,
-                new FakePlayerRecovery());
+                new FakePlayerRecovery(),
+                bestTimeStore);
         }
 
         private static int ReadLiveBotCount(Type managerType, Component manager)
@@ -331,7 +441,7 @@ namespace RobotArena.Session.Tests
             }
         }
 
-        private sealed class RecordingBotFactory : ISessionBotFactory
+        private sealed class BotCreationTrackingFactory : ISessionBotFactory
         {
             private int nextBotId = 1;
 
@@ -358,6 +468,33 @@ namespace RobotArena.Session.Tests
             public void RestoreHealthFraction(float fraction)
             {
                 RestoredFractions.Add(fraction);
+            }
+        }
+
+        private sealed class FakeBestTimeStore : ISessionBestTimeStore
+        {
+            public List<float> SavedBestTimes { get; } = new List<float>();
+
+            public FakeBestTimeStore(params float[] savedBestTimes)
+            {
+                SavedBestTimes.AddRange(savedBestTimes);
+            }
+
+            public bool TryLoadBestTime(out float bestTime)
+            {
+                if (SavedBestTimes.Count == 0)
+                {
+                    bestTime = default;
+                    return false;
+                }
+
+                bestTime = SavedBestTimes[SavedBestTimes.Count - 1];
+                return true;
+            }
+
+            public void SaveBestTime(float bestTime)
+            {
+                SavedBestTimes.Add(bestTime);
             }
         }
     }

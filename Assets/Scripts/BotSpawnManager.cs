@@ -26,6 +26,8 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     private PlayerHP playerHealth;
 
     public SessionState State => session?.State ?? SessionState.NotStarted;
+    public SessionResult? Result => session?.Result;
+    public float? BestTime => session?.BestTime;
     public int LiveBotCount => session?.LiveBotCount ?? 0;
     public int CurrentWaveNumber => session?.CurrentWaveNumber ?? 0;
     public int TotalWaves => session?.TotalWaves ?? waveConfigurations?.Count ?? 0;
@@ -34,7 +36,11 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     {
         CollectSpawnPoints();
         playerHealth = FindObjectOfType<PlayerHP>();
-        session = new SessionOrchestrator(CreateSessionPlan(), this, this);
+        session = new SessionOrchestrator(
+            CreateSessionPlan(),
+            this,
+            this,
+            new PlayerPrefsSessionBestTimeStore());
         session.StateChanged += OnSessionStateChanged;
 
         SessionBotRegistration[] placedBots = FindObjectsOfType<SessionBotRegistration>();
@@ -213,6 +219,11 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         }
         else if (state == SessionState.Lost && playerHealth != null && playerHealth.deathScreen != null)
         {
+            if (Result.HasValue)
+            {
+                playerHealth.deathScreen.SetResult(Result.Value, BestTime);
+            }
+
             playerHealth.deathScreen.ShowDeathScreen();
         }
     }
@@ -221,6 +232,12 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     {
         if (winScreen != null)
         {
+            WinScreen resultScreen = winScreen.GetComponentInParent<WinScreen>(true);
+            if (resultScreen != null && Result.HasValue)
+            {
+                resultScreen.SetResult(Result.Value, BestTime);
+            }
+
             winScreen.SetActive(true);
         }
 
