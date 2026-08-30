@@ -5,6 +5,7 @@ namespace RobotArena.Session
         NotStarted,
         Spawning,
         Clearing,
+        Intermission,
         Won,
         Lost
     }

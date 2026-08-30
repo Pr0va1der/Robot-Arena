@@ -2,6 +2,6 @@ namespace RobotArena.Session
 {
     public interface ISessionBotFactory
     {
-        bool TryCreateBot(out BotId bot);
+        bool TryCreateBot(WaveSchedule wave, out BotId bot);
     }
 }

@@ -4,13 +4,12 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotRegistry
+public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotRegistry, IPlayerRecovery
 {
-    [Header("Spawn Settings")]
-    [FormerlySerializedAs("waveDuration")]
-    public float spawnDuration = 20f;
-    public float spawnInterval = 2f;
-    public int maxBotsOnMap = 5;
+    [Header("Waves")]
+    public List<WaveConfiguration> waveConfigurations = WaveConfiguration.CreateDefaults();
+    public float intermissionDuration = 5f;
+    [Range(0f, 1f)] public float intermissionHealthRestoreFraction = 0.20f;
 
     [Header("Bots")]
     public GameObject botPrefab;
@@ -28,13 +27,14 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
 
     public SessionState State => session?.State ?? SessionState.NotStarted;
     public int LiveBotCount => session?.LiveBotCount ?? 0;
+    public int CurrentWaveNumber => session?.CurrentWaveNumber ?? 0;
+    public int TotalWaves => session?.TotalWaves ?? waveConfigurations?.Count ?? 0;
 
     private void Start()
     {
         CollectSpawnPoints();
-        session = new SessionOrchestrator(
-            new WaveSchedule(spawnDuration, spawnInterval, maxBotsOnMap),
-            this);
+        playerHealth = FindObjectOfType<PlayerHP>();
+        session = new SessionOrchestrator(CreateSessionPlan(), this, this);
         session.StateChanged += OnSessionStateChanged;
 
         SessionBotRegistration[] placedBots = FindObjectsOfType<SessionBotRegistration>();
@@ -46,7 +46,6 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         }
 
         session.StartSession(initialBots);
-        playerHealth = FindObjectOfType<PlayerHP>();
         if (playerHealth != null)
         {
             playerHealth.Died += OnPlayerDied;
@@ -64,12 +63,12 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
 
         if (botsCounterText != null)
         {
-            botsCounterText.text = $"Ботов осталось: {LiveBotCount}";
+            botsCounterText.text = $"Волна {CurrentWaveNumber}/{TotalWaves} · Ботов осталось: {LiveBotCount}";
         }
 
-        if (spawnTimerText != null && State == SessionState.Spawning)
+        if (spawnTimerText != null)
         {
-            spawnTimerText.text = $"До конца появления: {Mathf.CeilToInt(session.SpawnTimeRemaining)}";
+            UpdateStateText();
         }
     }
 
@@ -96,7 +95,7 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         return bot != null && session != null && session.RemoveBot(bot.Id);
     }
 
-    public bool TryCreateBot(out BotId botId)
+    public bool TryCreateBot(WaveSchedule wave, out BotId botId)
     {
         botId = default;
         if (botPrefab == null || spawnPoints.Count == 0)
@@ -118,10 +117,19 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         Animator animator = bot.GetComponentInChildren<Animator>();
         if (animator != null)
         {
+            ApplyShootingDifficulty(animator, wave);
             animator.SetBool("isPlayerVisible", true);
         }
 
         return true;
+    }
+
+    public void RestoreHealthFraction(float fraction)
+    {
+        if (playerHealth != null)
+        {
+            playerHealth.Heal(playerHealth.maxHealth * fraction);
+        }
     }
 
     public void OnPlayerDied()
@@ -144,9 +152,57 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         }
     }
 
+    private SessionPlan CreateSessionPlan()
+    {
+        if (waveConfigurations == null ||
+            waveConfigurations.Count != 4 ||
+            waveConfigurations.Exists(configuration => configuration == null))
+        {
+            Debug.LogWarning("A session requires exactly four wave configurations. Defaults were restored.");
+            waveConfigurations = WaveConfiguration.CreateDefaults();
+        }
+
+        var schedules = new List<WaveSchedule>(waveConfigurations.Count);
+        foreach (WaveConfiguration configuration in waveConfigurations)
+        {
+            schedules.Add(configuration.ToSchedule());
+        }
+
+        return new SessionPlan(
+            schedules,
+            intermissionDuration,
+            intermissionHealthRestoreFraction);
+    }
+
+    private static void ApplyShootingDifficulty(Animator animator, WaveSchedule wave)
+    {
+        gunsUpBehaviour[] shootingBehaviours = animator.GetBehaviours<gunsUpBehaviour>();
+        foreach (gunsUpBehaviour behaviour in shootingBehaviours)
+        {
+            behaviour.fireRate *= wave.FireIntervalMultiplier;
+            behaviour.aimConeAngle *= wave.AimConeMultiplier;
+        }
+    }
+
+    private void UpdateStateText()
+    {
+        if (State == SessionState.Spawning)
+        {
+            spawnTimerText.text = $"Появление: {Mathf.CeilToInt(session.SpawnTimeRemaining)}";
+        }
+        else if (State == SessionState.Clearing)
+        {
+            spawnTimerText.text = "Зачистите оставшихся ботов";
+        }
+        else if (State == SessionState.Intermission)
+        {
+            spawnTimerText.text = $"Следующая волна через: {Mathf.CeilToInt(session.IntermissionTimeRemaining)}";
+        }
+    }
+
     private void OnSessionStateChanged(SessionState state)
     {
-        if (state != SessionState.Spawning && spawnTimerText != null)
+        if ((state == SessionState.Won || state == SessionState.Lost) && spawnTimerText != null)
         {
             spawnTimerText.gameObject.SetActive(false);
         }
