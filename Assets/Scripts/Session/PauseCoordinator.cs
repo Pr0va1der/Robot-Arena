@@ -8,7 +8,8 @@ namespace RobotArena.Session
             PauseSource.User |
             PauseSource.Focus |
             PauseSource.Platform |
-            PauseSource.Advertisement;
+            PauseSource.Advertisement |
+            PauseSource.Result;
         private const PauseSource SystemSources =
             PauseSource.Focus |
             PauseSource.Platform |
@@ -20,6 +21,7 @@ namespace RobotArena.Session
         public event Action<bool> PauseStateChanged;
 
         public bool IsPaused => activeSources != PauseSource.None;
+        public bool IsAudioPaused => (activeSources & ~PauseSource.Result) != PauseSource.None;
         public PauseSource ActiveSources => activeSources;
         public bool RequiresPointerLockClick => requiresPointerLockClick;
 

@@ -53,6 +53,9 @@ public class RobotHealth : MonoBehaviour, IDamageable
         isDead = true;
         Debug.Log($"{gameObject.name} уничтожен!");
 
+        BotCombatReporter combatReporter = GetComponentInParent<BotCombatReporter>();
+        combatReporter?.ExitCombat();
+
         Destroy(objectToDestroy != null ? objectToDestroy : gameObject);
         SpawnUltimateEffect();
     }

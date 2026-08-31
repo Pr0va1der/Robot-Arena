@@ -67,14 +67,18 @@ public class DeathScreen : MonoBehaviour
     // Кнопка рестарта уровня
     public void RestartLevel()
     {
+        GameMusicRuntime.GetOrCreate().BeginFreshCalm();
         Time.timeScale = 1f;
+        AudioListener.pause = false;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     // Кнопка выхода в главное меню
     public void QuitToMenu(string sceneName)
     {
+        GameMusicRuntime.GetOrCreate().BeginFreshCalm();
         Time.timeScale = 1f;
+        AudioListener.pause = false;
         SceneManager.LoadScene(0);
     }
 }

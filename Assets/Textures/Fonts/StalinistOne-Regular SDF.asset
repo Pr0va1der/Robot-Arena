@@ -58,7 +58,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 71c1514a6bd24e1e882cebbe1904ce04, type: 3}
-  m_Name: StalinistOne-Regular SDF
+  m_Name: RobotArenaUI SDF
   m_EditorClassIdentifier: 
   hashCode: 1331884033
   material: {fileID: 6599880502338216204}
@@ -2533,8 +2533,10 @@ MonoBehaviour:
     kerningPairs: []
   m_FontFeatureTable:
     m_GlyphPairAdjustmentRecords: []
-  fallbackFontAssets: []
-  m_FallbackFontAssetTable: []
+  fallbackFontAssets:
+  - {fileID: 11400000, guid: ca92ce2c33f60454dbb940fe50474faf, type: 2}
+  m_FallbackFontAssetTable:
+  - {fileID: 11400000, guid: ca92ce2c33f60454dbb940fe50474faf, type: 2}
   m_CreationSettings:
     sourceFontFileName: 
     sourceFontFileGUID: 417d0fda77e7edf449255d6493c7021a

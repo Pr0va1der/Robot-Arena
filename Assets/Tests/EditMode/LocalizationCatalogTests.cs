@@ -11,8 +11,12 @@ namespace RobotArena.Session.Tests
         {
             foreach (LocalizationKey key in Enum.GetValues(typeof(LocalizationKey)))
             {
-                Assert.That(LocalizationCatalog.Get(GameLanguage.Russian, key), Is.Not.Empty, key.ToString());
-                Assert.That(LocalizationCatalog.Get(GameLanguage.English, key), Is.Not.Empty, key.ToString());
+                string russian = LocalizationCatalog.Get(GameLanguage.Russian, key);
+                string english = LocalizationCatalog.Get(GameLanguage.English, key);
+                Assert.That(russian, Is.Not.Empty, key.ToString());
+                Assert.That(english, Is.Not.Empty, key.ToString());
+                Assert.That(russian, Does.Not.Contain("\uFFFD"), key.ToString());
+                Assert.That(english, Does.Not.Contain("\uFFFD"), key.ToString());
             }
         }
 

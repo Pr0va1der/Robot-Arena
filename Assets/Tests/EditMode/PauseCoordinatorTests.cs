@@ -43,5 +43,23 @@ namespace RobotArena.Session.Tests
             Assert.That(pauseCoordinator.RequiresPointerLockClick, Is.False);
             Assert.That(pauseCoordinator.TryConsumePointerLockRequest(), Is.False);
         }
+
+        [Test]
+        public void Result_pause_stops_gameplay_but_keeps_death_music_audible()
+        {
+            var pauseCoordinator = new PauseCoordinator();
+
+            pauseCoordinator.SetSource(PauseSource.Result, true);
+
+            Assert.That(pauseCoordinator.IsPaused, Is.True);
+            Assert.That(pauseCoordinator.IsAudioPaused, Is.False);
+
+            pauseCoordinator.SetSource(PauseSource.Focus, true);
+
+            Assert.That(pauseCoordinator.IsAudioPaused, Is.True);
+
+            pauseCoordinator.SetSource(PauseSource.Focus, false);
+            Assert.That(pauseCoordinator.IsAudioPaused, Is.False);
+        }
     }
 }

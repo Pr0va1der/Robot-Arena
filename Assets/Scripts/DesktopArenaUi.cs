@@ -200,7 +200,6 @@ public sealed class DesktopArenaUi : MonoBehaviour
         resultPanel.SetActive(true);
         pauseMenu.SetTutorialMode(false);
         pauseMenu.SetResultMode(true);
-        pauseMenu.SetPauseSource(PauseSource.User, true);
         RefreshResultText(state);
 
         SelectButton(resultRetryButton);
@@ -501,6 +500,8 @@ public sealed class DesktopArenaUi : MonoBehaviour
 
     private void RestartSession()
     {
+        GameMusicRuntime.GetOrCreate().BeginFreshCalm();
+        pauseMenu.SetResultMode(false);
         Time.timeScale = 1f;
         AudioListener.pause = false;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);

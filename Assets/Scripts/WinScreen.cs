@@ -64,13 +64,17 @@ public class WinScreen : MonoBehaviour
 
     public void RestartLevel()
     {
+        GameMusicRuntime.GetOrCreate().BeginFreshCalm();
         Time.timeScale = 1f;
+        AudioListener.pause = false;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     public void QuitToMenu(string sceneName)
     {
+        GameMusicRuntime.GetOrCreate().BeginFreshCalm();
         Time.timeScale = 1f;
+        AudioListener.pause = false;
         SceneManager.LoadScene(0);
     }
 }

@@ -1,8 +1,12 @@
 {
   "name": "RobotArena.Session.EditMode.Tests",
   "rootNamespace": "RobotArena.Session.Tests",
+  "includePlatforms": [
+    "Editor"
+  ],
   "references": [
-    "RobotArena.Session"
+    "RobotArena.Session",
+    "Unity.TextMeshPro"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"

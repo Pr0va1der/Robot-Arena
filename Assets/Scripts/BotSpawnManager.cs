@@ -134,6 +134,8 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
             animator.SetBool("isPlayerVisible", true);
         }
 
+        BotCombatReporter.Ensure(bot).EnterCombat();
+
         return true;
     }
 

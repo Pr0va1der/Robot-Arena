@@ -34,7 +34,7 @@ public static class DesktopUiFactory
 
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
         text.text = value;
-        text.font = TMP_Settings.defaultFontAsset;
+        text.font = RobotArenaUiFont.Get();
         text.fontSize = fontSize;
         text.color = color;
         text.alignment = alignment;

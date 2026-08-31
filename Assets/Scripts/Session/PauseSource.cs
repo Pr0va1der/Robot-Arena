@@ -9,6 +9,7 @@ namespace RobotArena.Session
         User = 1,
         Focus = 2,
         Platform = 4,
-        Advertisement = 8
+        Advertisement = 8,
+        Result = 16
     }
 }

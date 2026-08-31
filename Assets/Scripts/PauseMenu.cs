@@ -6,6 +6,7 @@ using UnityEngine.SceneManagement;
 public class PauseMenu : MonoBehaviour
 {
     public static bool GameIsPaused { get; private set; }
+    public static bool AudioIsPaused { get; private set; }
     public static bool PointerLockGestureConsumed { get; private set; }
 
     [Header("UI Elements")]
@@ -20,6 +21,7 @@ public class PauseMenu : MonoBehaviour
 
     public PauseCoordinator PauseCoordinator => pauseCoordinator;
     public bool IsPaused => pauseCoordinator.IsPaused;
+    public bool IsAudioPaused => pauseCoordinator.IsAudioPaused;
     public PauseSource ActivePauseSources => pauseCoordinator.ActiveSources;
     public bool RequiresPointerLockClick => pauseCoordinator.RequiresPointerLockClick;
     public bool IsTutorialMode => tutorialMode;
@@ -95,6 +97,7 @@ public class PauseMenu : MonoBehaviour
     public void SetResultMode(bool isActive)
     {
         resultMode = isActive;
+        SetPauseSource(PauseSource.Result, isActive);
         UpdatePauseUi();
     }
 
@@ -169,8 +172,9 @@ public class PauseMenu : MonoBehaviour
     private void ApplyPauseState(bool isPaused)
     {
         GameIsPaused = isPaused;
+        AudioIsPaused = pauseCoordinator.IsAudioPaused;
         Time.timeScale = isPaused ? 0f : 1f;
-        AudioListener.pause = isPaused;
+        AudioListener.pause = AudioIsPaused;
 
         if (isPaused || pauseCoordinator.RequiresPointerLockClick)
         {
@@ -235,6 +239,9 @@ public class PauseMenu : MonoBehaviour
 
     public void ToTitleScreen()
     {
+        GameMusicRuntime.GetOrCreate().BeginFreshCalm();
+        SetPauseSource(PauseSource.Result, false);
+        SetPauseSource(PauseSource.User, false);
         Time.timeScale = 1f;
         AudioListener.pause = false;
         SceneManager.LoadScene("Title Screen");
@@ -244,6 +251,7 @@ public class PauseMenu : MonoBehaviour
     {
         pauseCoordinator.PauseStateChanged -= OnPauseStateChanged;
         GameIsPaused = false;
+        AudioIsPaused = false;
         PointerLockGestureConsumed = false;
         Time.timeScale = 1f;
         AudioListener.pause = false;
