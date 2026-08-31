@@ -84,6 +84,72 @@ public static class DesktopUiFactory
         return button;
     }
 
+    public static TextMeshProUGUI GetButtonLabel(Button button)
+    {
+        return button == null
+            ? null
+            : button.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
+    }
+
+    public static void SetButtonLabel(Button button, string label)
+    {
+        TextMeshProUGUI text = GetButtonLabel(button);
+        if (text != null)
+        {
+            text.text = label;
+        }
+    }
+
+    public static Slider CreateSlider(
+        string name,
+        Transform parent,
+        Color backgroundColor,
+        Color fillColor,
+        Color handleColor,
+        Action<float> onValueChanged)
+    {
+        GameObject sliderObject = new GameObject(name, typeof(RectTransform), typeof(Slider));
+        sliderObject.transform.SetParent(parent, false);
+
+        Slider slider = sliderObject.GetComponent<Slider>();
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.value = 1f;
+        slider.direction = Slider.Direction.LeftToRight;
+
+        GameObject background = CreatePanel("Background", sliderObject.transform, backgroundColor, true);
+        Stretch(background.GetComponent<RectTransform>(), 0f, 5f, 0f, 5f);
+
+        GameObject fillArea = new GameObject("FillArea", typeof(RectTransform));
+        fillArea.transform.SetParent(sliderObject.transform, false);
+        Stretch(fillArea.GetComponent<RectTransform>(), 10f, 0f, 10f, 0f);
+
+        GameObject fill = CreatePanel("Fill", fillArea.transform, fillColor, false);
+        RectTransform fillRect = fill.GetComponent<RectTransform>();
+        fillRect.anchorMin = Vector2.zero;
+        fillRect.anchorMax = Vector2.one;
+        fillRect.offsetMin = Vector2.zero;
+        fillRect.offsetMax = Vector2.zero;
+
+        GameObject handle = CreatePanel("Handle", sliderObject.transform, handleColor, true);
+        RectTransform handleRect = handle.GetComponent<RectTransform>();
+        handleRect.anchorMin = new Vector2(0f, 0.5f);
+        handleRect.anchorMax = new Vector2(0f, 0.5f);
+        handleRect.pivot = new Vector2(0.5f, 0.5f);
+        handleRect.sizeDelta = new Vector2(24f, 34f);
+
+        slider.fillRect = fillRect;
+        slider.handleRect = handleRect;
+        slider.targetGraphic = handle.GetComponent<Image>();
+
+        if (onValueChanged != null)
+        {
+            slider.onValueChanged.AddListener(value => onValueChanged(value));
+        }
+
+        return slider;
+    }
+
     public static GameObject CreateFullScreenRoot(
         string name,
         Transform parent,

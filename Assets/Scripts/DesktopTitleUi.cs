@@ -1,8 +1,10 @@
+using RobotArena.Session;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using ArenaPlayerSettings = RobotArena.Session.PlayerSettings;
 
 public sealed class DesktopTitleUi : MonoBehaviour
 {
@@ -12,8 +14,21 @@ public sealed class DesktopTitleUi : MonoBehaviour
     private static readonly Color AccentColor = new Color(0.30f, 0.82f, 0.95f, 1f);
 
     private Transform legacyRoot;
+    private GameSettingsRuntime settingsRuntime;
+    private DesktopSettingsUi settingsUi;
     private GameObject desktopRoot;
     private GameObject controlsPanel;
+
+    private TextMeshProUGUI titleText;
+    private TextMeshProUGUI subtitleText;
+    private TextMeshProUGUI hintText;
+    private TextMeshProUGUI controlsTitleText;
+    private TextMeshProUGUI controlsDetailsText;
+    private Button startButton;
+    private Button controlsButton;
+    private Button settingsButton;
+    private Button quitButton;
+    private Button controlsCloseButton;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void InstallForTitleScene()
@@ -48,17 +63,36 @@ public sealed class DesktopTitleUi : MonoBehaviour
             return;
         }
 
+        settingsRuntime = GameSettingsRuntime.GetOrCreate();
+        settingsRuntime.SettingsChanged += OnSettingsChanged;
+
         DesktopUiFactory.EnsureEventSystem();
         HideLegacyUi();
         CreateUi(canvas.transform);
-        SelectButton(desktopRoot.transform.Find("SafeArea/Card/StartButton")?.GetComponent<Button>());
+        RefreshLocalizedText();
+        SelectButton(startButton);
     }
 
     private void Update()
     {
-        if (controlsPanel != null && controlsPanel.activeSelf && GameplayInputActions.Current.PausePressed)
+        if (GameplayInputActions.Current.PausePressed)
         {
-            HideControls();
+            if (settingsUi != null && settingsUi.IsVisible)
+            {
+                HideSettings();
+            }
+            else if (controlsPanel != null && controlsPanel.activeSelf)
+            {
+                HideControls();
+            }
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (settingsRuntime != null)
+        {
+            settingsRuntime.SettingsChanged -= OnSettingsChanged;
         }
     }
 
@@ -74,14 +108,36 @@ public sealed class DesktopTitleUi : MonoBehaviour
 
     public void ShowControls()
     {
+        if (settingsUi != null && settingsUi.IsVisible)
+        {
+            settingsUi.Hide();
+        }
+
         controlsPanel.SetActive(true);
-        SelectButton(controlsPanel.transform.Find("Card/CloseButton")?.GetComponent<Button>());
+        SelectButton(controlsCloseButton);
     }
 
     public void HideControls()
     {
         controlsPanel.SetActive(false);
-        SelectButton(desktopRoot.transform.Find("SafeArea/Card/StartButton")?.GetComponent<Button>());
+        SelectButton(settingsButton);
+    }
+
+    public void ShowSettings()
+    {
+        controlsPanel.SetActive(false);
+        settingsUi.Show();
+    }
+
+    public void HideSettings()
+    {
+        settingsUi.Hide();
+        SelectButton(settingsButton);
+    }
+
+    private void OnSettingsChanged(ArenaPlayerSettings settings)
+    {
+        RefreshLocalizedText();
     }
 
     private void CreateUi(Transform canvasTransform)
@@ -92,39 +148,129 @@ public sealed class DesktopTitleUi : MonoBehaviour
             desktopRoot.transform,
             true).transform;
 
-        GameObject card = CreateCard(safeRoot, "Card", new Vector2(720f, 620f));
-        CreateText(card.transform, "Title", "ROBOT ARENA", 56f, new Vector2(0f, 220f), new Vector2(660f, 86f), AccentColor);
-        CreateText(card.transform, "Subtitle", "Desktop WebGL prototype", 23f, new Vector2(0f, 164f), new Vector2(620f, 42f), Color.white);
+        GameObject card = CreateCard(safeRoot, "Card", new Vector2(720f, 700f));
+        titleText = CreateText(
+            card.transform,
+            "Title",
+            string.Empty,
+            56f,
+            new Vector2(0f, 252f),
+            new Vector2(660f, 86f),
+            AccentColor);
+        subtitleText = CreateText(
+            card.transform,
+            "Subtitle",
+            string.Empty,
+            23f,
+            new Vector2(0f, 196f),
+            new Vector2(620f, 42f),
+            Color.white);
 
-        Button start = DesktopUiFactory.CreateButton("StartButton", card.transform, "Начать сессию", new Vector2(430f, 70f), ButtonColor, StartGame);
-        SetCenter(start.GetComponent<RectTransform>(), new Vector2(0f, 78f), new Vector2(430f, 70f));
-        Button controls = DesktopUiFactory.CreateButton("ControlsButton", card.transform, "Управление", new Vector2(430f, 70f), ButtonColor, ShowControls);
-        SetCenter(controls.GetComponent<RectTransform>(), new Vector2(0f, -10f), new Vector2(430f, 70f));
-        Button quit = DesktopUiFactory.CreateButton("QuitButton", card.transform, "Выйти", new Vector2(430f, 70f), ButtonColor, QuitGame);
-        SetCenter(quit.GetComponent<RectTransform>(), new Vector2(0f, -98f), new Vector2(430f, 70f));
-        ConfigureNavigation(start, controls, quit);
+        startButton = DesktopUiFactory.CreateButton(
+            "StartButton",
+            card.transform,
+            string.Empty,
+            new Vector2(430f, 70f),
+            ButtonColor,
+            StartGame);
+        SetCenter(startButton.GetComponent<RectTransform>(), new Vector2(0f, 104f), new Vector2(430f, 70f));
+        controlsButton = DesktopUiFactory.CreateButton(
+            "ControlsButton",
+            card.transform,
+            string.Empty,
+            new Vector2(430f, 70f),
+            ButtonColor,
+            ShowControls);
+        SetCenter(controlsButton.GetComponent<RectTransform>(), new Vector2(0f, 20f), new Vector2(430f, 70f));
+        settingsButton = DesktopUiFactory.CreateButton(
+            "SettingsButton",
+            card.transform,
+            string.Empty,
+            new Vector2(430f, 70f),
+            ButtonColor,
+            ShowSettings);
+        SetCenter(settingsButton.GetComponent<RectTransform>(), new Vector2(0f, -64f), new Vector2(430f, 70f));
+        quitButton = DesktopUiFactory.CreateButton(
+            "QuitButton",
+            card.transform,
+            string.Empty,
+            new Vector2(430f, 70f),
+            ButtonColor,
+            QuitGame);
+        SetCenter(quitButton.GetComponent<RectTransform>(), new Vector2(0f, -148f), new Vector2(430f, 70f));
+        ConfigureNavigation(startButton, controlsButton, settingsButton, quitButton);
 
-        CreateText(card.transform, "Hint", "Enter / Space — выбрать    Esc — назад", 18f, new Vector2(0f, -205f), new Vector2(600f, 36f), new Color(1f, 1f, 1f, 0.75f));
+        hintText = CreateText(
+            card.transform,
+            "Hint",
+            string.Empty,
+            18f,
+            new Vector2(0f, -274f),
+            new Vector2(600f, 36f),
+            new Color(1f, 1f, 1f, 0.75f));
+
         CreateControlsPanel(safeRoot);
+        GameObject settingsPanel = CreateOverlay(safeRoot, "Settings");
+        settingsUi = settingsPanel.AddComponent<DesktopSettingsUi>();
+        settingsUi.Initialize(settingsRuntime, HideSettings);
+        settingsPanel.SetActive(false);
     }
 
     private void CreateControlsPanel(Transform parent)
     {
         controlsPanel = CreateOverlay(parent, "Controls");
         GameObject card = CreateCard(controlsPanel.transform, "Card", new Vector2(760f, 610f));
-        CreateText(card.transform, "Title", "Управление", 44f, new Vector2(0f, 214f), new Vector2(700f, 70f), AccentColor);
-        CreateText(
+        controlsTitleText = CreateText(
+            card.transform,
+            "Title",
+            string.Empty,
+            44f,
+            new Vector2(0f, 214f),
+            new Vector2(700f, 70f),
+            AccentColor);
+        controlsDetailsText = CreateText(
             card.transform,
             "Details",
-            "WASD / стрелки — движение\nМышь — обзор и огонь\nSpace — прыжок\nLeft Shift — торможение\nQ — импульс отдачи\nEsc — пауза",
+            string.Empty,
             27f,
             new Vector2(0f, 28f),
             new Vector2(660f, 300f),
             Color.white);
-        Button close = DesktopUiFactory.CreateButton("CloseButton", card.transform, "Назад", new Vector2(400f, 70f), ButtonColor, HideControls);
-        SetCenter(close.GetComponent<RectTransform>(), new Vector2(0f, -205f), new Vector2(400f, 70f));
-        SetButtonNavigation(close, null, null);
+        controlsCloseButton = DesktopUiFactory.CreateButton(
+            "CloseButton",
+            card.transform,
+            string.Empty,
+            new Vector2(400f, 70f),
+            ButtonColor,
+            HideControls);
+        SetCenter(controlsCloseButton.GetComponent<RectTransform>(), new Vector2(0f, -205f), new Vector2(400f, 70f));
+        SetButtonNavigation(controlsCloseButton, null, null);
         controlsPanel.SetActive(false);
+    }
+
+    private string Localize(LocalizationKey key)
+    {
+        return DesktopLocalization.Get(settingsRuntime, key);
+    }
+
+    private void RefreshLocalizedText()
+    {
+        if (titleText == null)
+        {
+            return;
+        }
+
+        titleText.text = Localize(LocalizationKey.GameTitle);
+        subtitleText.text = Localize(LocalizationKey.Subtitle);
+        hintText.text = Localize(LocalizationKey.MenuHint);
+        controlsTitleText.text = Localize(LocalizationKey.Controls);
+        controlsDetailsText.text = Localize(LocalizationKey.ControlsDetails);
+        DesktopUiFactory.SetButtonLabel(startButton, Localize(LocalizationKey.StartSession));
+        DesktopUiFactory.SetButtonLabel(controlsButton, Localize(LocalizationKey.Controls));
+        DesktopUiFactory.SetButtonLabel(settingsButton, Localize(LocalizationKey.Settings));
+        DesktopUiFactory.SetButtonLabel(quitButton, Localize(LocalizationKey.Quit));
+        DesktopUiFactory.SetButtonLabel(controlsCloseButton, Localize(LocalizationKey.Back));
+        settingsUi.Refresh();
     }
 
     private static GameObject CreateOverlay(Transform parent, string name)
@@ -171,11 +317,12 @@ public sealed class DesktopTitleUi : MonoBehaviour
         button.navigation = navigation;
     }
 
-    private static void ConfigureNavigation(Button start, Button controls, Button quit)
+    private static void ConfigureNavigation(Button start, Button controls, Button settings, Button quit)
     {
         SetButtonNavigation(start, null, controls);
-        SetButtonNavigation(controls, start, quit);
-        SetButtonNavigation(quit, controls, null);
+        SetButtonNavigation(controls, start, settings);
+        SetButtonNavigation(settings, controls, quit);
+        SetButtonNavigation(quit, settings, null);
     }
 
     private static void SelectButton(Button button)
