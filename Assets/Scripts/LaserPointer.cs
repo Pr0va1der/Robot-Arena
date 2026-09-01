@@ -3,58 +3,105 @@ using UnityEngine;
 [RequireComponent(typeof(LineRenderer))]
 public class LaserPointer : MonoBehaviour
 {
-    public Transform barrel;          // Откуда выходит луч
-    public float maxDistance = 100f;  // Максимальная длина луча
-    public LayerMask hitLayers;       // Слои, с которыми взаимодействует лазер
-    public GameObject laserDotPrefab; // Префаб точки на поверхности (по желанию)
+    public Transform barrel;
+    public float maxDistance = 100f;
+    public LayerMask hitLayers;
+    public GameObject laserDotPrefab;
+    public Vector3 localAimAxis = Vector3.up;
 
-    private LineRenderer lr;
+    public Vector3 AimTarget { get; private set; }
+    public Vector3 AimDirection { get; private set; }
+    public bool HasHit { get; private set; }
+
+    private LineRenderer lineRenderer;
     private GameObject laserDot;
 
-    void Start()
+    private void Start()
     {
-        lr = GetComponent<LineRenderer>();
-        lr.positionCount = 2;
-        lr.startWidth = 0.01f;
-        lr.endWidth = 0.002f;
+        EnsureRenderer();
 
         if (laserDotPrefab != null)
-            laserDot = Instantiate(laserDotPrefab);
-
-        // Задаём начальные позиции луча, чтобы не мигал на старте
-        if (barrel != null)
         {
-            Vector3 start = barrel.position;
-            Vector3 end = barrel.position + barrel.up * maxDistance;
-            lr.SetPosition(0, start);
-            lr.SetPosition(1, end);
+            laserDot = Instantiate(laserDotPrefab);
         }
+
+        RefreshAim();
     }
 
-    void LateUpdate()
+    private void LateUpdate()
     {
-        if (barrel == null) return;
+        RefreshAim();
+    }
 
-        lr.SetPosition(0, barrel.position);
-
-        Ray ray = new Ray(barrel.position, barrel.up);
-        if (Physics.Raycast(ray, out RaycastHit hit, maxDistance, hitLayers))
+    public bool TryGetAimTarget(out Vector3 target)
+    {
+        if (barrel == null)
         {
-            lr.SetPosition(1, hit.point);
+            target = default;
+            return false;
+        }
 
-            if (laserDot != null)
+        RefreshAim();
+        target = AimTarget;
+        return true;
+    }
+
+    public bool RefreshAim()
+    {
+        if (barrel == null)
+        {
+            AimTarget = default;
+            AimDirection = default;
+            HasHit = false;
+            return false;
+        }
+
+        Vector3 axis = localAimAxis.sqrMagnitude > 0.0001f
+            ? localAimAxis.normalized
+            : Vector3.up;
+        AimDirection = barrel.TransformDirection(axis).normalized;
+        float distance = Mathf.Max(0f, maxDistance);
+        Ray ray = new Ray(barrel.position, AimDirection);
+        HasHit = Physics.Raycast(ray, out RaycastHit hit, distance, hitLayers);
+        AimTarget = HasHit
+            ? hit.point
+            : barrel.position + AimDirection * distance;
+
+        EnsureRenderer();
+        if (lineRenderer != null)
+        {
+            lineRenderer.SetPosition(0, barrel.position);
+            lineRenderer.SetPosition(1, AimTarget);
+        }
+
+        if (laserDot != null)
+        {
+            laserDot.SetActive(HasHit);
+            if (HasHit)
             {
                 laserDot.transform.position = hit.point + hit.normal * 0.001f;
                 laserDot.transform.rotation = Quaternion.LookRotation(hit.normal);
-                laserDot.SetActive(true);
             }
         }
-        else
-        {
-            lr.SetPosition(1, barrel.position + barrel.up * maxDistance);
 
-            if (laserDot != null)
-                laserDot.SetActive(false);
+        return HasHit;
+    }
+
+    private void EnsureRenderer()
+    {
+        if (lineRenderer != null)
+        {
+            return;
         }
+
+        lineRenderer = GetComponent<LineRenderer>();
+        if (lineRenderer == null)
+        {
+            return;
+        }
+
+        lineRenderer.positionCount = 2;
+        lineRenderer.startWidth = 0.01f;
+        lineRenderer.endWidth = 0.002f;
     }
 }

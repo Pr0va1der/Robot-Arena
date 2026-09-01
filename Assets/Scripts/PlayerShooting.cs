@@ -1,14 +1,26 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+using System.Collections;
+using RobotArena.PlayerWeapon;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class PlayerShooting : MonoBehaviour
 {
+    private const string ShootStateName = "Shoot";
+    private const string UltimateStateName = "Ulta";
+    private const string IdleStateName = "Idle";
+    private const float UltimateAnimationWaitTimeout = 5f;
+
     [Header("Shooting Settings")]
-    public GameObject bulletPrefab;       // Префаб пули
-    public Transform[] barrels;           // Список дул (может быть одно или два)
-    public float shootForce = 50f;        // Сила выстрела
-    public float fireRate = 0.2f;         // Задержка между выстрелами
+    public GameObject bulletPrefab;
+    public Transform[] barrels;
+    public float shootForce = 50f;
+    [FormerlySerializedAs("fireRate")]
+    [Min(0.01f)] public float recoilCycleDuration = 0.25f;
+    [Min(0.01f)] public float shootAnimationDurationAtDefaultSpeed = 0.8125f;
+    [Min(0f)] public float shootAnimationTransitionDuration = 0.03f;
+
+    [Header("Aim")]
+    public LaserPointer laserPointer;
 
     [Header("Ulti Settings")]
     public float ultimateForce = 15f;
@@ -17,15 +29,17 @@ public class PlayerShooting : MonoBehaviour
     public GameObject physicsBody;
 
     [Header("Ulti Effect")]
-    public GameObject ultimateEffectPrefab;   
-    public Transform ultiSpawnPoint;         
-    public float ultiEffectLifetime = 2f;   
+    public GameObject ultimateEffectPrefab;
+    public Transform ultiSpawnPoint;
+    public float ultiEffectLifetime = 2f;
 
     private Animator animator;
     private Rigidbody rb;
-    private bool isPlayingAnimation = false;
-    private float nextFireTime = 0f;
-    private float nextUltimateTime = 0f;
+    private PlayerWeaponController weaponController;
+    private Coroutine ultimateAnimationRoutine;
+    private float nextUltimateTime;
+    private float defaultAnimatorSpeed = 1f;
+    private bool shootAnimationActive;
 
     public float UltimateCooldownRemaining => Mathf.Max(0f, nextUltimateTime - Time.time);
     public bool IsUltimateReady => UltimateCooldownRemaining <= 0f;
@@ -33,15 +47,30 @@ public class PlayerShooting : MonoBehaviour
     private void Start()
     {
         animator = GetComponent<Animator>();
+        if (animator != null)
+        {
+            defaultAnimatorSpeed = animator.speed;
+        }
+
+        weaponController = new PlayerWeaponController(Mathf.Max(0.01f, recoilCycleDuration));
 
         if (cameraTransform == null && Camera.main != null)
+        {
             cameraTransform = Camera.main.transform;
+        }
+
+        if (laserPointer == null)
+        {
+            laserPointer = GetComponentInChildren<LaserPointer>(true);
+        }
 
         if (physicsBody != null)
         {
             rb = physicsBody.GetComponent<Rigidbody>();
             if (rb == null)
+            {
                 Debug.LogError($"{physicsBody.name} не содержит Rigidbody!");
+            }
         }
         else
         {
@@ -51,84 +80,230 @@ public class PlayerShooting : MonoBehaviour
 
     private void Update()
     {
-        if (PauseMenu.GameIsPaused)
+        if (PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed)
         {
             return;
         }
 
-        if (PauseMenu.PointerLockGestureConsumed)
+        if (weaponController == null)
         {
             return;
         }
-
-        if (isPlayingAnimation) return;
 
         IGameplayInputActions inputActions = GameplayInputActions.Current;
+        PlayerWeaponCommand command = weaponController.Tick(
+            Time.time,
+            inputActions.FireHeld,
+            inputActions.UltimatePressed,
+            IsUltimateReady);
 
-        // --- Обычный выстрел ---
-        if (inputActions.FirePressed && Time.time >= nextFireTime)
+        switch (command)
         {
-            PlayAnimation("Shoot");
-            FireBullets();
-            nextFireTime = Time.time + fireRate;
+            case PlayerWeaponCommand.FireVolley:
+                PlayShootAnimation();
+                FireBullets();
+                break;
+            case PlayerWeaponCommand.StartUltimate:
+                StartUltimate();
+                break;
         }
 
-        // --- Ульта ---
-        if (inputActions.UltimatePressed && IsUltimateReady)
+        SyncAnimationState();
+    }
+
+    private void PlayShootAnimation()
+    {
+        if (animator == null)
         {
-            PlayAnimation("Ultimate");
-            ApplyUltimateForce();
-            SpawnUltimateEffect(); 
-            nextUltimateTime = Time.time + ultimateCooldown;
+            return;
         }
+
+        animator.speed = GetShootAnimationSpeed();
+        animator.CrossFadeInFixedTime(
+            ShootStateName,
+            shootAnimationTransitionDuration,
+            0,
+            0f);
+        shootAnimationActive = true;
     }
 
-    void PlayAnimation(string triggerName)
+    private void SyncAnimationState()
     {
-        animator.SetTrigger(triggerName);
-        isPlayingAnimation = true;
-        StartCoroutine(ResetAfterAnimation());
+        if (animator == null || weaponController.IsUltimateActive || weaponController.IsRecoilActive)
+        {
+            return;
+        }
+
+        if (!shootAnimationActive)
+        {
+            return;
+        }
+
+        animator.speed = defaultAnimatorSpeed;
+        animator.CrossFadeInFixedTime(
+            IdleStateName,
+            shootAnimationTransitionDuration,
+            0,
+            0f);
+        shootAnimationActive = false;
     }
 
-    IEnumerator ResetAfterAnimation()
+    private float GetShootAnimationSpeed()
     {
-        AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
-        yield return new WaitForSeconds(stateInfo.length);
-        isPlayingAnimation = false;
+        float duration = Mathf.Max(0.01f, recoilCycleDuration);
+        return defaultAnimatorSpeed * shootAnimationDurationAtDefaultSpeed / duration;
     }
 
-    void FireBullets()
+    private void StartUltimate()
     {
-        if (bulletPrefab == null || barrels.Length == 0) return;
+        FinishShootAnimation();
+        ApplyUltimateForce();
+        SpawnUltimateEffect();
+        nextUltimateTime = Time.time + ultimateCooldown;
 
+        if (animator == null)
+        {
+            weaponController.CompleteUltimate();
+            return;
+        }
+
+        animator.speed = defaultAnimatorSpeed;
+        animator.CrossFadeInFixedTime(
+            UltimateStateName,
+            shootAnimationTransitionDuration,
+            0,
+            0f);
+
+        if (ultimateAnimationRoutine != null)
+        {
+            StopCoroutine(ultimateAnimationRoutine);
+        }
+
+        ultimateAnimationRoutine = StartCoroutine(CompleteUltimateAfterAnimation());
+    }
+
+    private IEnumerator CompleteUltimateAfterAnimation()
+    {
+        yield return null;
+        float timeoutAt = Time.time + UltimateAnimationWaitTimeout;
+
+        while (animator != null &&
+               Time.time < timeoutAt &&
+               !animator.GetCurrentAnimatorStateInfo(0).IsName(UltimateStateName))
+        {
+            yield return null;
+        }
+
+        while (animator != null && Time.time < timeoutAt)
+        {
+            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+            if (stateInfo.IsName(UltimateStateName) && stateInfo.normalizedTime >= 1f)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        weaponController.CompleteUltimate();
+        ultimateAnimationRoutine = null;
+    }
+
+    private void FinishShootAnimation()
+    {
+        if (animator == null || !shootAnimationActive)
+        {
+            return;
+        }
+
+        animator.speed = defaultAnimatorSpeed;
+        animator.CrossFadeInFixedTime(
+            IdleStateName,
+            shootAnimationTransitionDuration,
+            0,
+            0f);
+        shootAnimationActive = false;
+    }
+
+    private void FireBullets()
+    {
+        if (bulletPrefab == null || barrels == null || barrels.Length == 0)
+        {
+            return;
+        }
+
+        Vector3 aimTarget = GetAimTarget();
         foreach (Transform barrel in barrels)
         {
-            GameObject bullet = Instantiate(bulletPrefab, barrel.position, barrel.rotation);
+            if (barrel == null)
+            {
+                continue;
+            }
+
+            Vector3 direction = PlayerWeaponAim.DirectionToTarget(
+                barrel.position,
+                aimTarget,
+                barrel.forward);
+            GameObject bullet = Instantiate(
+                bulletPrefab,
+                barrel.position,
+                Quaternion.LookRotation(direction));
             Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
 
             if (bulletRb != null)
             {
                 bulletRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-                bulletRb.useGravity = true;
-                bulletRb.AddForce(barrel.forward * shootForce, ForceMode.Impulse);
+                bulletRb.useGravity = false;
+                bulletRb.AddForce(direction * shootForce, ForceMode.Impulse);
+            }
+
+            Bullet bulletComponent = bullet.GetComponent<Bullet>();
+            if (bulletComponent != null)
+            {
+                bulletComponent.owner = gameObject;
+                bulletComponent.useGravity = false;
             }
 
             Destroy(bullet, 5f);
         }
     }
 
-    void ApplyUltimateForce()
+    private Vector3 GetAimTarget()
     {
-        if (rb == null || cameraTransform == null) return;
+        if (laserPointer != null && laserPointer.TryGetAimTarget(out Vector3 target))
+        {
+            return target;
+        }
 
-        Vector3 direction = cameraTransform.forward;
-        direction.y = 0;
-        direction.Normalize();
+        foreach (Transform barrel in barrels)
+        {
+            if (barrel != null)
+            {
+                return barrel.position + barrel.forward * 100f;
+            }
+        }
 
-        rb.AddForce(-direction * ultimateForce, ForceMode.Impulse);
+        return transform.position + transform.forward * 100f;
     }
 
-    void SpawnUltimateEffect()
+    private void ApplyUltimateForce()
+    {
+        if (rb == null || cameraTransform == null)
+        {
+            return;
+        }
+
+        Vector3 direction = cameraTransform.forward;
+        direction.y = 0f;
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
+
+        rb.AddForce(-direction.normalized * ultimateForce, ForceMode.Impulse);
+    }
+
+    private void SpawnUltimateEffect()
     {
         if (ultimateEffectPrefab == null)
         {

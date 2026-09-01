@@ -1,31 +1,62 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+using RobotArena.PlayerWeapon;
 using UnityEngine;
 
 public class GunRotation : MonoBehaviour
 {
-    public Transform target;          // Шар
-    public Transform cameraTransform; // Камера
+    public Transform target;
+    public Transform cameraTransform;
     public float rotationSpeed = 10f;
+    public float verticalAimSpeed = 180f;
+    public float minElevation = -45f;
+    public float maxElevation = 45f;
 
-    void Update()
+    public float Elevation => elevation;
+
+    private float elevation;
+
+    private void Awake()
     {
-        
+        if (cameraTransform == null && Camera.main != null)
+        {
+            cameraTransform = Camera.main.transform;
+        }
+
+        elevation = 0f;
     }
 
-    void LateUpdate()
+    private void LateUpdate()
     {
         if (target != null)
         {
-            // Следуем точно за позицией шара (без задержки)
             transform.position = target.position;
         }
 
-        if (cameraTransform != null)
+        if (cameraTransform == null)
         {
-            // Поворачиваем пушку туда, куда смотрит камера
-            Quaternion targetRotation = Quaternion.Euler(-90f, cameraTransform.eulerAngles.y, 0f);
-            transform.rotation = Quaternion.Lerp(transform.rotation, targetRotation, Time.deltaTime * rotationSpeed);
+            return;
         }
+
+        if (!PauseMenu.GameIsPaused &&
+            !PauseMenu.PointerLockGestureConsumed &&
+            Cursor.lockState == CursorLockMode.Locked)
+        {
+            float lookY = GameplayInputActions.Current.Look.y;
+            elevation = PlayerWeaponAim.ClampElevation(
+                elevation,
+                lookY,
+                verticalAimSpeed,
+                Time.deltaTime,
+                minElevation,
+                maxElevation);
+        }
+
+        Quaternion targetRotation = Quaternion.Euler(
+            -90f - elevation,
+            cameraTransform.eulerAngles.y,
+            0f);
+        transform.rotation = Quaternion.Lerp(
+            transform.rotation,
+            targetRotation,
+            Time.deltaTime * rotationSpeed);
     }
 }

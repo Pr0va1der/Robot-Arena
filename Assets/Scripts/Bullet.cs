@@ -5,6 +5,7 @@ public class Bullet : MonoBehaviour
     public float speed = 200f;
     public float lifetime = 5f;
     public float damage = 25f;
+    public bool useGravity = true;
 
     [HideInInspector] public GameObject owner; // Кто выстрелил — не получит урон от своей пули
 
@@ -14,7 +15,7 @@ public class Bullet : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        rb.useGravity = true;
+        rb.useGravity = useGravity;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.isKinematic = false;
 
@@ -47,7 +48,7 @@ public class Bullet : MonoBehaviour
 
         // Останавливаем пулю
         rb.velocity = Vector3.zero;
-        rb.useGravity = true;
+        rb.useGravity = useGravity;
         rb.isKinematic = true;
 
         // Уничтожаем пулю чуть позже (чтобы не исчезала мгновенно)

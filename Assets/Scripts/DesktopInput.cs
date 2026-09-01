@@ -16,7 +16,7 @@ public sealed class DesktopInput : IGameplayInputActions
         Input.GetAxis(LookHorizontalAction),
         Input.GetAxis(LookVerticalAction));
 
-    public bool FirePressed => Input.GetMouseButtonDown(0);
+    public bool FireHeld => Input.GetMouseButton(0);
     public bool JumpHeld => Input.GetKey(KeyCode.Space);
     public bool BrakeHeld => Input.GetKey(KeyCode.LeftShift);
     public bool UltimatePressed => Input.GetKeyDown(KeyCode.Q);

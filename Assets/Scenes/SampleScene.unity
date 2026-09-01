@@ -5847,6 +5847,9 @@ MonoBehaviour:
   target: {fileID: 830364046}
   cameraTransform: {fileID: 419118570}
   rotationSpeed: 10
+  verticalAimSpeed: 180
+  minElevation: -45
+  maxElevation: 45
 --- !u!1001 &420564683
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -28261,7 +28264,10 @@ MonoBehaviour:
   - {fileID: 1582292714}
   - {fileID: 1279180114}
   shootForce: 50
-  fireRate: 0.2
+  recoilCycleDuration: 0.25
+  shootAnimationDurationAtDefaultSpeed: 0.8125
+  shootAnimationTransitionDuration: 0.03
+  laserPointer: {fileID: 2082693416}
   ultimateForce: 10
   cameraTransform: {fileID: 419118570}
   physicsBody: {fileID: 830364041}
@@ -32206,6 +32212,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   laserDotPrefab: {fileID: 2486361104094463660, guid: 8d037b33b848b3e419aaacc805ff487f, type: 3}
+  localAimAxis: {x: 0, y: 1, z: 0}
 --- !u!120 &2082693417
 LineRenderer:
   serializedVersion: 2

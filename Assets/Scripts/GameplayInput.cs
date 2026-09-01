@@ -5,7 +5,7 @@ public interface IGameplayInputActions
 {
     Vector2 Movement { get; }
     Vector2 Look { get; }
-    bool FirePressed { get; }
+    bool FireHeld { get; }
     bool JumpHeld { get; }
     bool BrakeHeld { get; }
     bool UltimatePressed { get; }

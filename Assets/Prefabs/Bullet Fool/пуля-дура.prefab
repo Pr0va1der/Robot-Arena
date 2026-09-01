@@ -111,6 +111,7 @@ MonoBehaviour:
   speed: 200
   lifetime: 5
   damage: 25
+  useGravity: 0
   owner: {fileID: 0}
 --- !u!54 &5073519562456538949
 Rigidbody:

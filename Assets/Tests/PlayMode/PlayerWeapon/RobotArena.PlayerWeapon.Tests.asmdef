@@ -1,0 +1,10 @@
+{
+  "name": "RobotArena.PlayerWeapon.Tests",
+  "rootNamespace": "RobotArena.PlayerWeapon.Tests",
+  "references": [
+    "RobotArena.PlayerWeapon"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
