@@ -4,13 +4,21 @@ namespace RobotArena.PlayerWeapon
 {
     public static class PlayerWeaponAim
     {
-        public static float ClampElevation(
-            float current,
-            float lookDelta,
-            float lookSpeed,
-            float deltaTime,
-            float minElevation,
-            float maxElevation)
+        public static float VerticalViewAngle(Vector3 cameraForward)
+        {
+            if (cameraForward.sqrMagnitude < 0.0001f)
+            {
+                return 0f;
+            }
+
+            cameraForward.Normalize();
+            float horizontalForwardMagnitude = new Vector2(cameraForward.x, cameraForward.z).magnitude;
+            return Mathf.Atan2(
+                -cameraForward.y,
+                horizontalForwardMagnitude) * Mathf.Rad2Deg;
+        }
+
+        public static float ClampElevation(float elevation, float minElevation, float maxElevation)
         {
             if (maxElevation < minElevation)
             {
@@ -19,11 +27,7 @@ namespace RobotArena.PlayerWeapon
                 maxElevation = swapped;
             }
 
-            return Mathf.Clamp(
-                current + lookDelta * lookSpeed * deltaTime,
-                minElevation,
-                maxElevation);
+            return Mathf.Clamp(elevation, minElevation, maxElevation);
         }
-
     }
 }

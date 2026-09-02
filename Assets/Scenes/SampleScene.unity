@@ -5032,7 +5032,6 @@ MonoBehaviour:
   target: {fileID: 830364046}
   cameraTransform: {fileID: 419118570}
   rotationSpeed: 10
-  verticalAimSpeed: 180
   minElevation: -45
   maxElevation: 45
 --- !u!1001 &420564683

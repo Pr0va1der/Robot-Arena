@@ -6,13 +6,8 @@ public class GunRotation : MonoBehaviour
     public Transform target;
     public Transform cameraTransform;
     public float rotationSpeed = 10f;
-    public float verticalAimSpeed = 180f;
     public float minElevation = -45f;
     public float maxElevation = 45f;
-
-    public float Elevation => elevation;
-
-    private float elevation;
 
     private void Awake()
     {
@@ -21,7 +16,6 @@ public class GunRotation : MonoBehaviour
             cameraTransform = Camera.main.transform;
         }
 
-        elevation = 0f;
     }
 
     private void LateUpdate()
@@ -36,18 +30,16 @@ public class GunRotation : MonoBehaviour
             return;
         }
 
-        if (!PauseMenu.GameIsPaused &&
-            !PauseMenu.PointerLockGestureConsumed)
+        if (PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed)
         {
-            float lookY = GameplayInputActions.Current.Look.y;
-            elevation = PlayerWeaponAim.ClampElevation(
-                elevation,
-                lookY,
-                verticalAimSpeed,
-                Time.deltaTime,
-                minElevation,
-                maxElevation);
+            return;
         }
+
+        // The camera's final view direction supplies pitch only; the weapon remains the line-of-fire authority.
+        float elevation = PlayerWeaponAim.ClampElevation(
+            PlayerWeaponAim.VerticalViewAngle(cameraTransform.forward),
+            minElevation,
+            maxElevation);
 
         Quaternion targetRotation = Quaternion.Euler(
             -90f - elevation,
