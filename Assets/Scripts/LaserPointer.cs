@@ -1,6 +1,7 @@
 using UnityEngine;
 
 [RequireComponent(typeof(LineRenderer))]
+[DefaultExecutionOrder(110)]
 public class LaserPointer : MonoBehaviour
 {
     public Transform barrel;

@@ -15,9 +15,9 @@ namespace RobotArena.PlayerWeapon.Tests
             {
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
 
-                yield return WaitForFrames(60);
-
-                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 35f, 0f));
+                yield return WaitForRotation(
+                    fixture.WeaponObject,
+                    Quaternion.Euler(-110f, 35f, 0f));
             }
         }
 
@@ -27,20 +27,40 @@ namespace RobotArena.PlayerWeapon.Tests
             using (AimFixture fixture = new AimFixture("LimitAimCamera", "LimitAimWeapon"))
             {
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(70f, 0f, 0f);
-                yield return WaitForFrames(60);
-                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-135f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-135f, 0f, 0f));
 
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
-                yield return WaitForFrames(60);
-                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 0f, 0f));
 
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(-70f, 0f, 0f);
-                yield return WaitForFrames(60);
-                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-45f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-45f, 0f, 0f));
 
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(-20f, 0f, 0f);
-                yield return WaitForFrames(60);
-                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-70f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-70f, 0f, 0f));
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Weapon_converges_smoothly_to_the_camera_angle()
+        {
+            using (AimFixture fixture = new AimFixture("SmoothAimCamera", "SmoothAimWeapon"))
+            {
+                Quaternion expectedRotation = Quaternion.Euler(-110f, 35f, 0f);
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
+
+                float initialDistance = Quaternion.Angle(
+                    fixture.WeaponObject.transform.rotation,
+                    expectedRotation);
+
+                yield return null;
+
+                float firstFrameDistance = Quaternion.Angle(
+                    fixture.WeaponObject.transform.rotation,
+                    expectedRotation);
+                Assert.That(firstFrameDistance, Is.GreaterThan(1f));
+                Assert.That(firstFrameDistance, Is.LessThan(initialDistance));
+
+                yield return WaitForRotation(fixture.WeaponObject, expectedRotation);
             }
         }
 
@@ -50,10 +70,12 @@ namespace RobotArena.PlayerWeapon.Tests
             using (AimFixture fixture = new AimFixture("StationaryAimCamera", "StationaryAimWeapon"))
             {
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
-                yield return WaitForFrames(60);
+                yield return WaitForRotation(
+                    fixture.WeaponObject,
+                    Quaternion.Euler(-110f, 0f, 0f));
                 Quaternion settledRotation = fixture.WeaponObject.transform.rotation;
 
-                yield return WaitForFrames(60);
+                yield return new WaitForSecondsRealtime(0.25f);
 
                 Assert.That(
                     Quaternion.Angle(fixture.WeaponObject.transform.rotation, settledRotation),
@@ -73,36 +95,60 @@ namespace RobotArena.PlayerWeapon.Tests
             PlayerWeaponTestReflection.SetField(gunRotation, "maxElevation", 45f);
         }
 
-        private static void AssertWeaponRotation(GameObject weaponObject, Quaternion expectedRotation)
+        private static void AssertWeaponRotation(
+            GameObject weaponObject,
+            Quaternion expectedRotation,
+            float tolerance = 1f)
         {
             Assert.That(
                 Quaternion.Angle(weaponObject.transform.rotation, expectedRotation),
-                Is.LessThan(1f));
+                Is.LessThan(tolerance));
         }
 
-        private static IEnumerator WaitForFrames(int frameCount)
+        private static IEnumerator WaitForRotation(
+            GameObject weaponObject,
+            Quaternion expectedRotation,
+            float tolerance = 1f,
+            float timeoutSeconds = 1f)
         {
-            for (int frame = 0; frame < frameCount; frame++)
+            float deadline = Time.realtimeSinceStartup + timeoutSeconds;
+            while (Quaternion.Angle(weaponObject.transform.rotation, expectedRotation) >= tolerance &&
+                   Time.realtimeSinceStartup < deadline)
             {
                 yield return null;
             }
+
+            AssertWeaponRotation(weaponObject, expectedRotation, tolerance);
         }
 
         private sealed class AimFixture : IDisposable
         {
             private readonly float previousTimeScale;
+            private GameObject cameraObject;
+            private GameObject weaponObject;
 
             public AimFixture(string cameraName, string weaponName)
             {
                 previousTimeScale = Time.timeScale;
                 Time.timeScale = 1f;
-                CameraObject = new GameObject(cameraName);
-                WeaponObject = new GameObject(weaponName);
-                AddGunRotation(WeaponObject, CameraObject.transform);
+
+                try
+                {
+                    cameraObject = new GameObject(cameraName);
+                    weaponObject = new GameObject(weaponName);
+                    AddGunRotation(weaponObject, cameraObject.transform);
+                }
+                catch
+                {
+                    UnityEngine.Object.DestroyImmediate(cameraObject);
+                    UnityEngine.Object.DestroyImmediate(weaponObject);
+                    Time.timeScale = previousTimeScale;
+                    throw;
+                }
             }
 
-            public GameObject CameraObject { get; }
-            public GameObject WeaponObject { get; }
+            public GameObject CameraObject => cameraObject;
+            public GameObject WeaponObject => weaponObject;
 
             public void Dispose()
             {
