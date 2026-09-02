@@ -96,8 +96,8 @@ namespace RobotArena.PlayerWeapon.Tests
             var createdObjects = new List<GameObject>();
             try
             {
-                Type playerShootingType = FindRuntimeType("PlayerShooting");
-                Type laserPointerType = FindRuntimeType("LaserPointer");
+                Type playerShootingType = PlayerWeaponTestReflection.FindRuntimeType("PlayerShooting");
+                Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
                 Assert.That(playerShootingType, Is.Not.Null);
                 Assert.That(laserPointerType, Is.Not.Null);
 
@@ -116,10 +116,10 @@ namespace RobotArena.PlayerWeapon.Tests
                 aimBarrel.transform.SetParent(player.transform);
                 aimBarrel.transform.position = Vector3.zero;
                 Component laserPointer = aimBarrel.AddComponent(laserPointerType);
-                SetField(laserPointer, "barrel", aimBarrel.transform);
-                SetField(laserPointer, "localAimAxis", Vector3.forward);
-                SetField(laserPointer, "maxDistance", 20f);
-                SetField(laserPointer, "hitLayers", (LayerMask)(1 << 8));
+                PlayerWeaponTestReflection.SetField(laserPointer, "barrel", aimBarrel.transform);
+                PlayerWeaponTestReflection.SetField(laserPointer, "localAimAxis", Vector3.forward);
+                PlayerWeaponTestReflection.SetField(laserPointer, "maxDistance", 20f);
+                PlayerWeaponTestReflection.SetField(laserPointer, "hitLayers", (LayerMask)(1 << 8));
 
                 GameObject target = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 target.name = "LaserHitTarget";
@@ -133,11 +133,11 @@ namespace RobotArena.PlayerWeapon.Tests
                 createdObjects.Add(bulletPrefab);
 
                 Component shooting = player.AddComponent(playerShootingType);
-                SetField(shooting, "bulletPrefab", bulletPrefab);
-                SetField(shooting, "firePointLeft", leftBarrel.transform);
-                SetField(shooting, "firePointRight", rightBarrel.transform);
-                SetField(shooting, "laserPointer", laserPointer);
-                SetField(shooting, "shootForce", 10f);
+                PlayerWeaponTestReflection.SetField(shooting, "bulletPrefab", bulletPrefab);
+                PlayerWeaponTestReflection.SetField(shooting, "firePointLeft", leftBarrel.transform);
+                PlayerWeaponTestReflection.SetField(shooting, "firePointRight", rightBarrel.transform);
+                PlayerWeaponTestReflection.SetField(shooting, "laserPointer", laserPointer);
+                PlayerWeaponTestReflection.SetField(shooting, "shootForce", 10f);
 
                 MethodInfo tryFireVolley = playerShootingType.GetMethod(
                     "TryFireVolley",
@@ -192,28 +192,6 @@ namespace RobotArena.PlayerWeapon.Tests
             }
         }
 
-        private static Type FindRuntimeType(string typeName)
-        {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                Type type = assembly.GetType(typeName);
-                if (type != null)
-                {
-                    return type;
-                }
-            }
-
-            return null;
-        }
-
-        private static void SetField(Component component, string fieldName, object value)
-        {
-            FieldInfo field = component.GetType().GetField(
-                fieldName,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.That(field, Is.Not.Null);
-            field.SetValue(component, value);
-        }
     }
 
     public sealed class PauseMenuLifecycleTests
@@ -227,7 +205,7 @@ namespace RobotArena.PlayerWeapon.Tests
                 yield return null;
 
                 Invoke(pauseMenu, "SetTutorialMode", false);
-                Type pauseSourceType = FindRuntimeType("RobotArena.Session.PauseSource");
+                Type pauseSourceType = PlayerWeaponTestReflection.FindRuntimeType("RobotArena.Session.PauseSource");
                 object userSource = Enum.Parse(pauseSourceType, "User");
                 Invoke(pauseMenu, "SetPauseSource", userSource, true);
 
@@ -250,7 +228,7 @@ namespace RobotArena.PlayerWeapon.Tests
         [UnityTest]
         public IEnumerator Completing_tutorial_persists_completion_and_leaves_one_resume_gate()
         {
-            Type settingsRuntimeType = FindRuntimeType("GameSettingsRuntime");
+            Type settingsRuntimeType = PlayerWeaponTestReflection.FindRuntimeType("GameSettingsRuntime");
             object settingsRuntime = settingsRuntimeType.GetMethod("GetOrCreate").Invoke(null, null);
             PropertyInfo currentProperty = settingsRuntimeType.GetProperty("Current");
             FieldInfo currentField = settingsRuntimeType.GetField(
@@ -265,7 +243,7 @@ namespace RobotArena.PlayerWeapon.Tests
             {
                 PlayerPrefs.SetInt(tutorialKey, 0);
                 PlayerPrefs.Save();
-                Type storeType = FindRuntimeType("RobotArena.Session.PlayerPrefsPlayerSettingsStore");
+                Type storeType = PlayerWeaponTestReflection.FindRuntimeType("RobotArena.Session.PlayerPrefsPlayerSettingsStore");
                 object store = Activator.CreateInstance(storeType);
                 object incompleteSettings = storeType.GetMethod("Load").Invoke(store, null);
                 currentField.SetValue(settingsRuntime, incompleteSettings);
@@ -275,7 +253,7 @@ namespace RobotArena.PlayerWeapon.Tests
                 {
                     yield return null;
 
-                    Component desktopUi = canvasObject.GetComponent(FindRuntimeType("DesktopArenaUi"));
+                    Component desktopUi = canvasObject.GetComponent(PlayerWeaponTestReflection.FindRuntimeType("DesktopArenaUi"));
                     Assert.That(desktopUi, Is.Not.Null);
                     Invoke(desktopUi, "StartTutorial");
 
@@ -340,7 +318,7 @@ namespace RobotArena.PlayerWeapon.Tests
             canvasObject.AddComponent<CanvasScaler>();
             canvasObject.AddComponent<GraphicRaycaster>();
 
-            Type pauseMenuType = FindRuntimeType("PauseMenu");
+            Type pauseMenuType = PlayerWeaponTestReflection.FindRuntimeType("PauseMenu");
             pauseMenu = canvasObject.AddComponent(pauseMenuType);
             return canvasObject;
         }
@@ -365,7 +343,7 @@ namespace RobotArena.PlayerWeapon.Tests
 
         private static bool GetStaticBool(string typeName, string propertyName)
         {
-            Type type = FindRuntimeType(typeName);
+            Type type = PlayerWeaponTestReflection.FindRuntimeType(typeName);
             PropertyInfo property = type.GetProperty(
                 propertyName,
                 BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
@@ -373,7 +351,11 @@ namespace RobotArena.PlayerWeapon.Tests
             return (bool)property.GetValue(null);
         }
 
-        private static Type FindRuntimeType(string typeName)
+    }
+
+    internal static class PlayerWeaponTestReflection
+    {
+        public static Type FindRuntimeType(string typeName)
         {
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -385,6 +367,15 @@ namespace RobotArena.PlayerWeapon.Tests
             }
 
             return null;
+        }
+
+        public static void SetField(Component component, string fieldName, object value)
+        {
+            FieldInfo field = component.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            field.SetValue(component, value);
         }
     }
 }

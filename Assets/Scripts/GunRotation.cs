@@ -1,6 +1,7 @@
 using RobotArena.PlayerWeapon;
 using UnityEngine;
 
+[DefaultExecutionOrder(100)]
 public class GunRotation : MonoBehaviour
 {
     public Transform target;
@@ -15,7 +16,6 @@ public class GunRotation : MonoBehaviour
         {
             cameraTransform = Camera.main.transform;
         }
-
     }
 
     private void LateUpdate()
@@ -26,11 +26,6 @@ public class GunRotation : MonoBehaviour
         }
 
         if (cameraTransform == null)
-        {
-            return;
-        }
-
-        if (PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed)
         {
             return;
         }

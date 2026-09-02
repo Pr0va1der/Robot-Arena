@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -12,99 +11,66 @@ namespace RobotArena.PlayerWeapon.Tests
         [UnityTest]
         public IEnumerator Weapon_follows_the_final_camera_vertical_angle()
         {
-            GameObject cameraObject = new GameObject("AimCamera");
-            GameObject weaponObject = new GameObject("AimWeapon");
-            float previousTimeScale = Time.timeScale;
-            try
+            using (AimFixture fixture = new AimFixture("AimCamera", "AimWeapon"))
             {
-                Time.timeScale = 1f;
-                AddGunRotation(weaponObject, cameraObject.transform);
-
-                cameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
 
                 yield return WaitForFrames(60);
 
-                AssertWeaponRotation(weaponObject, Quaternion.Euler(-110f, 35f, 0f));
-            }
-            finally
-            {
-                Time.timeScale = previousTimeScale;
-                UnityEngine.Object.DestroyImmediate(cameraObject);
-                UnityEngine.Object.DestroyImmediate(weaponObject);
+                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 35f, 0f));
             }
         }
 
         [UnityTest]
         public IEnumerator Weapon_clamps_camera_vertical_angle_and_recovers_from_the_limits()
         {
-            GameObject cameraObject = new GameObject("LimitAimCamera");
-            GameObject weaponObject = new GameObject("LimitAimWeapon");
-            float previousTimeScale = Time.timeScale;
-            try
+            using (AimFixture fixture = new AimFixture("LimitAimCamera", "LimitAimWeapon"))
             {
-                Time.timeScale = 1f;
-                AddGunRotation(weaponObject, cameraObject.transform);
-
-                cameraObject.transform.rotation = Quaternion.Euler(70f, 0f, 0f);
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(70f, 0f, 0f);
                 yield return WaitForFrames(60);
-                AssertWeaponRotation(weaponObject, Quaternion.Euler(-135f, 0f, 0f));
+                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-135f, 0f, 0f));
 
-                cameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
                 yield return WaitForFrames(60);
-                AssertWeaponRotation(weaponObject, Quaternion.Euler(-110f, 0f, 0f));
+                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 0f, 0f));
 
-                cameraObject.transform.rotation = Quaternion.Euler(-70f, 0f, 0f);
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(-70f, 0f, 0f);
                 yield return WaitForFrames(60);
-                AssertWeaponRotation(weaponObject, Quaternion.Euler(-45f, 0f, 0f));
-            }
-            finally
-            {
-                Time.timeScale = previousTimeScale;
-                UnityEngine.Object.DestroyImmediate(cameraObject);
-                UnityEngine.Object.DestroyImmediate(weaponObject);
+                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-45f, 0f, 0f));
+
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(-20f, 0f, 0f);
+                yield return WaitForFrames(60);
+                AssertWeaponRotation(fixture.WeaponObject, Quaternion.Euler(-70f, 0f, 0f));
             }
         }
 
         [UnityTest]
         public IEnumerator Weapon_does_not_drift_when_the_camera_is_stationary()
         {
-            GameObject cameraObject = new GameObject("StationaryAimCamera");
-            GameObject weaponObject = new GameObject("StationaryAimWeapon");
-            float previousTimeScale = Time.timeScale;
-            try
+            using (AimFixture fixture = new AimFixture("StationaryAimCamera", "StationaryAimWeapon"))
             {
-                Time.timeScale = 1f;
-                AddGunRotation(weaponObject, cameraObject.transform);
-
-                cameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
                 yield return WaitForFrames(60);
-                Quaternion settledRotation = weaponObject.transform.rotation;
+                Quaternion settledRotation = fixture.WeaponObject.transform.rotation;
 
                 yield return WaitForFrames(60);
 
                 Assert.That(
-                    Quaternion.Angle(weaponObject.transform.rotation, settledRotation),
+                    Quaternion.Angle(fixture.WeaponObject.transform.rotation, settledRotation),
                     Is.LessThan(0.1f));
-            }
-            finally
-            {
-                Time.timeScale = previousTimeScale;
-                UnityEngine.Object.DestroyImmediate(cameraObject);
-                UnityEngine.Object.DestroyImmediate(weaponObject);
             }
         }
 
-        private static Component AddGunRotation(GameObject weaponObject, Transform cameraTransform)
+        private static void AddGunRotation(GameObject weaponObject, Transform cameraTransform)
         {
-            Type gunRotationType = FindRuntimeType("GunRotation");
+            Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
             Assert.That(gunRotationType, Is.Not.Null);
 
             Component gunRotation = weaponObject.AddComponent(gunRotationType);
-            SetField(gunRotation, "cameraTransform", cameraTransform);
-            SetField(gunRotation, "rotationSpeed", 10f);
-            SetField(gunRotation, "minElevation", -45f);
-            SetField(gunRotation, "maxElevation", 45f);
-            return gunRotation;
+            PlayerWeaponTestReflection.SetField(gunRotation, "cameraTransform", cameraTransform);
+            PlayerWeaponTestReflection.SetField(gunRotation, "rotationSpeed", 10f);
+            PlayerWeaponTestReflection.SetField(gunRotation, "minElevation", -45f);
+            PlayerWeaponTestReflection.SetField(gunRotation, "maxElevation", 45f);
         }
 
         private static void AssertWeaponRotation(GameObject weaponObject, Quaternion expectedRotation)
@@ -122,27 +88,29 @@ namespace RobotArena.PlayerWeapon.Tests
             }
         }
 
-        private static Type FindRuntimeType(string typeName)
+        private sealed class AimFixture : IDisposable
         {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            private readonly float previousTimeScale;
+
+            public AimFixture(string cameraName, string weaponName)
             {
-                Type type = assembly.GetType(typeName);
-                if (type != null)
-                {
-                    return type;
-                }
+                previousTimeScale = Time.timeScale;
+                Time.timeScale = 1f;
+                CameraObject = new GameObject(cameraName);
+                WeaponObject = new GameObject(weaponName);
+                AddGunRotation(WeaponObject, CameraObject.transform);
             }
 
-            return null;
+            public GameObject CameraObject { get; }
+            public GameObject WeaponObject { get; }
+
+            public void Dispose()
+            {
+                Time.timeScale = previousTimeScale;
+                UnityEngine.Object.DestroyImmediate(CameraObject);
+                UnityEngine.Object.DestroyImmediate(WeaponObject);
+            }
         }
 
-        private static void SetField(Component component, string fieldName, object value)
-        {
-            FieldInfo field = component.GetType().GetField(
-                fieldName,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.That(field, Is.Not.Null);
-            field.SetValue(component, value);
-        }
     }
 }
