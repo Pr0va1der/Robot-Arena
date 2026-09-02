@@ -303,6 +303,10 @@ namespace RobotArena.Session.Tests
 
             pauseCoordinator.SetSource(PauseSource.Advertisement, false);
             session.Advance(1f);
+            Assert.That(session.ActiveTime, Is.EqualTo(1f));
+
+            Assert.That(pauseCoordinator.TryConsumePointerLockRequest(), Is.True);
+            session.Advance(1f);
             Assert.That(session.ActiveTime, Is.EqualTo(2f));
         }
 

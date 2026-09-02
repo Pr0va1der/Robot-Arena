@@ -43,7 +43,8 @@ namespace RobotArena.PlayerWeapon
             float now,
             bool fireHeld,
             bool ultimatePressed,
-            bool ultimateReady)
+            bool ultimateReady,
+            bool fireVolleyAvailable = true)
         {
             if (IsUltimateActive)
             {
@@ -80,7 +81,7 @@ namespace RobotArena.PlayerWeapon
                 return PlayerWeaponCommand.StartUltimate;
             }
 
-            if (!fireHeld)
+            if (!fireHeld || !fireVolleyAvailable)
             {
                 return PlayerWeaponCommand.None;
             }

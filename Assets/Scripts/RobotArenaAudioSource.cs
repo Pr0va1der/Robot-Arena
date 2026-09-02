@@ -57,5 +57,18 @@ public sealed class RobotArenaAudioSource : MonoBehaviour
         {
             source.Apply(settings);
         }
+
+        AudioSource[] unboundSources = FindObjectsOfType<AudioSource>();
+        foreach (AudioSource source in unboundSources)
+        {
+            if (source.GetComponent<RobotArenaAudioSource>() != null ||
+                source.GetComponentInParent<GameMusicRuntime>() != null)
+            {
+                continue;
+            }
+
+            RobotArenaAudioSource sfxSource = source.gameObject.AddComponent<RobotArenaAudioSource>();
+            sfxSource.Apply(settings);
+        }
     }
 }

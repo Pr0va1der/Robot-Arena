@@ -27,7 +27,7 @@ public class PlayerMove : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (PauseMenu.GameIsPaused)
+        if (PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed)
         {
             return;
         }

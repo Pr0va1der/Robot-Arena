@@ -34,6 +34,11 @@ public class RobotHealth : MonoBehaviour, IDamageable
             return;
         }
 
+        if (damage > 0f)
+        {
+            BotCombatReporter.Ensure(gameObject)?.EnterCombat();
+        }
+
         currentHealth -= damage;
         Debug.Log($"{gameObject.name} получил урон: {damage}. Осталось здоровья: {currentHealth}");
 

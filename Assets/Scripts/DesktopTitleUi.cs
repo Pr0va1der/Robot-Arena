@@ -1,7 +1,6 @@
 using RobotArena.Session;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using ArenaPlayerSettings = RobotArena.Session.PlayerSettings;
@@ -13,27 +12,36 @@ public sealed class DesktopTitleUi : MonoBehaviour
     private static readonly Color ButtonColor = new Color(0.12f, 0.33f, 0.52f, 1f);
     private static readonly Color AccentColor = new Color(0.30f, 0.82f, 0.95f, 1f);
 
-    private Transform legacyRoot;
     private GameSettingsRuntime settingsRuntime;
     private DesktopSettingsUi settingsUi;
     private GameObject desktopRoot;
     private GameObject controlsPanel;
+    private GameObject authorsPanel;
 
     private TextMeshProUGUI titleText;
     private TextMeshProUGUI subtitleText;
     private TextMeshProUGUI hintText;
     private TextMeshProUGUI controlsTitleText;
     private TextMeshProUGUI controlsDetailsText;
+    private TextMeshProUGUI authorsTitleText;
+    private TextMeshProUGUI authorsDetailsText;
     private Button startButton;
     private Button controlsButton;
     private Button settingsButton;
-    private Button quitButton;
+    private Button authorsButton;
     private Button controlsCloseButton;
+    private Button authorsCloseButton;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void InstallForTitleScene()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void InstallSceneHook()
     {
-        if (SceneManager.GetActiveScene().name != "Title Screen")
+        SceneManager.sceneLoaded -= InstallForTitleScene;
+        SceneManager.sceneLoaded += InstallForTitleScene;
+    }
+
+    private static void InstallForTitleScene(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name != "Title Screen")
         {
             return;
         }
@@ -44,9 +52,7 @@ public sealed class DesktopTitleUi : MonoBehaviour
             return;
         }
 
-        DesktopTitleUi titleUi = canvas.gameObject.AddComponent<DesktopTitleUi>();
-        MainMenu mainMenu = FindObjectOfType<MainMenu>();
-        titleUi.legacyRoot = mainMenu == null ? null : mainMenu.transform;
+        canvas.gameObject.AddComponent<DesktopTitleUi>();
     }
 
     private void Awake()
@@ -67,10 +73,9 @@ public sealed class DesktopTitleUi : MonoBehaviour
         settingsRuntime.SettingsChanged += OnSettingsChanged;
 
         DesktopUiFactory.EnsureEventSystem();
-        HideLegacyUi();
         CreateUi(canvas.transform);
         RefreshLocalizedText();
-        SelectButton(startButton);
+        DesktopUiFactory.Select(startButton);
     }
 
     private void Update()
@@ -84,6 +89,10 @@ public sealed class DesktopTitleUi : MonoBehaviour
             else if (controlsPanel != null && controlsPanel.activeSelf)
             {
                 HideControls();
+            }
+            else if (authorsPanel != null && authorsPanel.activeSelf)
+            {
+                HideAuthors();
             }
         }
     }
@@ -101,11 +110,6 @@ public sealed class DesktopTitleUi : MonoBehaviour
         SceneManager.LoadScene("SampleScene");
     }
 
-    public void QuitGame()
-    {
-        Application.Quit();
-    }
-
     public void ShowControls()
     {
         if (settingsUi != null && settingsUi.IsVisible)
@@ -113,26 +117,46 @@ public sealed class DesktopTitleUi : MonoBehaviour
             settingsUi.Hide();
         }
 
+        authorsPanel.SetActive(false);
         controlsPanel.SetActive(true);
-        SelectButton(controlsCloseButton);
+        DesktopUiFactory.Select(controlsCloseButton);
     }
 
     public void HideControls()
     {
         controlsPanel.SetActive(false);
-        SelectButton(settingsButton);
+        DesktopUiFactory.Select(controlsButton);
+    }
+
+    public void ShowAuthors()
+    {
+        if (settingsUi != null && settingsUi.IsVisible)
+        {
+            settingsUi.Hide();
+        }
+
+        controlsPanel.SetActive(false);
+        authorsPanel.SetActive(true);
+        DesktopUiFactory.Select(authorsCloseButton);
+    }
+
+    public void HideAuthors()
+    {
+        authorsPanel.SetActive(false);
+        DesktopUiFactory.Select(authorsButton);
     }
 
     public void ShowSettings()
     {
         controlsPanel.SetActive(false);
+        authorsPanel.SetActive(false);
         settingsUi.Show();
     }
 
     public void HideSettings()
     {
         settingsUi.Hide();
-        SelectButton(settingsButton);
+        DesktopUiFactory.Select(settingsButton);
     }
 
     private void OnSettingsChanged(ArenaPlayerSettings settings)
@@ -148,69 +172,35 @@ public sealed class DesktopTitleUi : MonoBehaviour
             desktopRoot.transform,
             true).transform;
 
-        GameObject card = CreateCard(safeRoot, "Card", new Vector2(720f, 700f));
-        titleText = CreateText(
-            card.transform,
-            "Title",
-            string.Empty,
-            56f,
-            new Vector2(0f, 252f),
-            new Vector2(660f, 86f),
-            AccentColor);
-        subtitleText = CreateText(
-            card.transform,
-            "Subtitle",
-            string.Empty,
-            23f,
-            new Vector2(0f, 196f),
-            new Vector2(620f, 42f),
-            Color.white);
+        GameObject card = DesktopUiFactory.CreateCard("Card", safeRoot, CardColor, new Vector2(720f, 700f));
+        titleText = DesktopUiFactory.CreatePositionedText(
+            "Title", card.transform, string.Empty, 56f, AccentColor,
+            new Vector2(0f, 252f), new Vector2(660f, 86f));
+        subtitleText = DesktopUiFactory.CreatePositionedText(
+            "Subtitle", card.transform, string.Empty, 23f, Color.white,
+            new Vector2(0f, 196f), new Vector2(620f, 42f));
 
         startButton = DesktopUiFactory.CreateButton(
-            "StartButton",
-            card.transform,
-            string.Empty,
-            new Vector2(430f, 70f),
-            ButtonColor,
-            StartGame);
-        SetCenter(startButton.GetComponent<RectTransform>(), new Vector2(0f, 104f), new Vector2(430f, 70f));
+            "StartButton", card.transform, string.Empty, new Vector2(430f, 70f), ButtonColor, StartGame);
+        DesktopUiFactory.SetCenter(startButton.GetComponent<RectTransform>(), new Vector2(0f, 104f), new Vector2(430f, 70f));
         controlsButton = DesktopUiFactory.CreateButton(
-            "ControlsButton",
-            card.transform,
-            string.Empty,
-            new Vector2(430f, 70f),
-            ButtonColor,
-            ShowControls);
-        SetCenter(controlsButton.GetComponent<RectTransform>(), new Vector2(0f, 20f), new Vector2(430f, 70f));
+            "ControlsButton", card.transform, string.Empty, new Vector2(430f, 70f), ButtonColor, ShowControls);
+        DesktopUiFactory.SetCenter(controlsButton.GetComponent<RectTransform>(), new Vector2(0f, 20f), new Vector2(430f, 70f));
         settingsButton = DesktopUiFactory.CreateButton(
-            "SettingsButton",
-            card.transform,
-            string.Empty,
-            new Vector2(430f, 70f),
-            ButtonColor,
-            ShowSettings);
-        SetCenter(settingsButton.GetComponent<RectTransform>(), new Vector2(0f, -64f), new Vector2(430f, 70f));
-        quitButton = DesktopUiFactory.CreateButton(
-            "QuitButton",
-            card.transform,
-            string.Empty,
-            new Vector2(430f, 70f),
-            ButtonColor,
-            QuitGame);
-        SetCenter(quitButton.GetComponent<RectTransform>(), new Vector2(0f, -148f), new Vector2(430f, 70f));
-        ConfigureNavigation(startButton, controlsButton, settingsButton, quitButton);
+            "SettingsButton", card.transform, string.Empty, new Vector2(430f, 70f), ButtonColor, ShowSettings);
+        DesktopUiFactory.SetCenter(settingsButton.GetComponent<RectTransform>(), new Vector2(0f, -64f), new Vector2(430f, 70f));
+        authorsButton = DesktopUiFactory.CreateButton(
+            "AuthorsButton", card.transform, string.Empty, new Vector2(430f, 70f), ButtonColor, ShowAuthors);
+        DesktopUiFactory.SetCenter(authorsButton.GetComponent<RectTransform>(), new Vector2(0f, -148f), new Vector2(430f, 70f));
+        DesktopUiFactory.ConfigureVerticalNavigation(startButton, controlsButton, settingsButton, authorsButton);
 
-        hintText = CreateText(
-            card.transform,
-            "Hint",
-            string.Empty,
-            18f,
-            new Vector2(0f, -274f),
-            new Vector2(600f, 36f),
-            new Color(1f, 1f, 1f, 0.75f));
+        hintText = DesktopUiFactory.CreatePositionedText(
+            "Hint", card.transform, string.Empty, 18f, new Color(1f, 1f, 1f, 0.75f),
+            new Vector2(0f, -274f), new Vector2(600f, 36f));
 
         CreateControlsPanel(safeRoot);
-        GameObject settingsPanel = CreateOverlay(safeRoot, "Settings");
+        CreateAuthorsPanel(safeRoot);
+        GameObject settingsPanel = DesktopUiFactory.CreateOverlay("Settings", safeRoot, OverlayColor);
         settingsUi = settingsPanel.AddComponent<DesktopSettingsUi>();
         settingsUi.Initialize(settingsRuntime, HideSettings);
         settingsPanel.SetActive(false);
@@ -218,34 +208,36 @@ public sealed class DesktopTitleUi : MonoBehaviour
 
     private void CreateControlsPanel(Transform parent)
     {
-        controlsPanel = CreateOverlay(parent, "Controls");
-        GameObject card = CreateCard(controlsPanel.transform, "Card", new Vector2(760f, 610f));
-        controlsTitleText = CreateText(
-            card.transform,
-            "Title",
-            string.Empty,
-            44f,
-            new Vector2(0f, 214f),
-            new Vector2(700f, 70f),
-            AccentColor);
-        controlsDetailsText = CreateText(
-            card.transform,
-            "Details",
-            string.Empty,
-            27f,
-            new Vector2(0f, 28f),
-            new Vector2(660f, 300f),
-            Color.white);
+        controlsPanel = DesktopUiFactory.CreateOverlay("Controls", parent, OverlayColor);
+        GameObject card = DesktopUiFactory.CreateCard("Card", controlsPanel.transform, CardColor, new Vector2(760f, 610f));
+        controlsTitleText = DesktopUiFactory.CreatePositionedText(
+            "Title", card.transform, string.Empty, 44f, AccentColor,
+            new Vector2(0f, 214f), new Vector2(700f, 70f));
+        controlsDetailsText = DesktopUiFactory.CreatePositionedText(
+            "Details", card.transform, string.Empty, 27f, Color.white,
+            new Vector2(0f, 28f), new Vector2(660f, 300f));
         controlsCloseButton = DesktopUiFactory.CreateButton(
-            "CloseButton",
-            card.transform,
-            string.Empty,
-            new Vector2(400f, 70f),
-            ButtonColor,
-            HideControls);
-        SetCenter(controlsCloseButton.GetComponent<RectTransform>(), new Vector2(0f, -205f), new Vector2(400f, 70f));
-        SetButtonNavigation(controlsCloseButton, null, null);
+            "CloseButton", card.transform, string.Empty, new Vector2(400f, 70f), ButtonColor, HideControls);
+        DesktopUiFactory.SetCenter(controlsCloseButton.GetComponent<RectTransform>(), new Vector2(0f, -205f), new Vector2(400f, 70f));
+        DesktopUiFactory.ConfigureVerticalNavigation(controlsCloseButton);
         controlsPanel.SetActive(false);
+    }
+
+    private void CreateAuthorsPanel(Transform parent)
+    {
+        authorsPanel = DesktopUiFactory.CreateOverlay("Authors", parent, OverlayColor);
+        GameObject card = DesktopUiFactory.CreateCard("Card", authorsPanel.transform, CardColor, new Vector2(620f, 520f));
+        authorsTitleText = DesktopUiFactory.CreatePositionedText(
+            "Title", card.transform, string.Empty, 44f, AccentColor,
+            new Vector2(0f, 176f), new Vector2(560f, 70f));
+        authorsDetailsText = DesktopUiFactory.CreatePositionedText(
+            "Details", card.transform, string.Empty, 30f, Color.white,
+            new Vector2(0f, 20f), new Vector2(500f, 230f));
+        authorsCloseButton = DesktopUiFactory.CreateButton(
+            "CloseButton", card.transform, string.Empty, new Vector2(400f, 70f), ButtonColor, HideAuthors);
+        DesktopUiFactory.SetCenter(authorsCloseButton.GetComponent<RectTransform>(), new Vector2(0f, -170f), new Vector2(400f, 70f));
+        DesktopUiFactory.ConfigureVerticalNavigation(authorsCloseButton);
+        authorsPanel.SetActive(false);
     }
 
     private string Localize(LocalizationKey key)
@@ -265,84 +257,15 @@ public sealed class DesktopTitleUi : MonoBehaviour
         hintText.text = Localize(LocalizationKey.MenuHint);
         controlsTitleText.text = Localize(LocalizationKey.Controls);
         controlsDetailsText.text = Localize(LocalizationKey.ControlsDetails);
+        authorsTitleText.text = Localize(LocalizationKey.Authors);
+        authorsDetailsText.text = Localize(LocalizationKey.AuthorsDetails);
         DesktopUiFactory.SetButtonLabel(startButton, Localize(LocalizationKey.StartSession));
         DesktopUiFactory.SetButtonLabel(controlsButton, Localize(LocalizationKey.Controls));
         DesktopUiFactory.SetButtonLabel(settingsButton, Localize(LocalizationKey.Settings));
-        DesktopUiFactory.SetButtonLabel(quitButton, Localize(LocalizationKey.Quit));
+        DesktopUiFactory.SetButtonLabel(authorsButton, Localize(LocalizationKey.Authors));
         DesktopUiFactory.SetButtonLabel(controlsCloseButton, Localize(LocalizationKey.Back));
+        DesktopUiFactory.SetButtonLabel(authorsCloseButton, Localize(LocalizationKey.Back));
         settingsUi.Refresh();
     }
 
-    private static GameObject CreateOverlay(Transform parent, string name)
-    {
-        GameObject panel = DesktopUiFactory.CreateFullScreenRoot(name, parent, false);
-        Image image = panel.GetComponent<Image>();
-        image.color = OverlayColor;
-        image.raycastTarget = true;
-        return panel;
-    }
-
-    private static GameObject CreateCard(Transform parent, string name, Vector2 size)
-    {
-        GameObject card = DesktopUiFactory.CreatePanel(name, parent, CardColor, true);
-        SetCenter(card.GetComponent<RectTransform>(), Vector2.zero, size);
-        return card;
-    }
-
-    private static TextMeshProUGUI CreateText(
-        Transform parent,
-        string name,
-        string value,
-        float fontSize,
-        Vector2 position,
-        Vector2 size,
-        Color color)
-    {
-        TextMeshProUGUI text = DesktopUiFactory.CreateText(name, parent, value, fontSize, color);
-        SetCenter(text.rectTransform, position, size);
-        return text;
-    }
-
-    private static void SetCenter(RectTransform rectTransform, Vector2 position, Vector2 size)
-    {
-        DesktopUiFactory.SetCenter(rectTransform, position, size);
-    }
-
-    private static void SetButtonNavigation(Button button, Selectable up, Selectable down)
-    {
-        Navigation navigation = button.navigation;
-        navigation.mode = Navigation.Mode.Explicit;
-        navigation.selectOnUp = up;
-        navigation.selectOnDown = down;
-        button.navigation = navigation;
-    }
-
-    private static void ConfigureNavigation(Button start, Button controls, Button settings, Button quit)
-    {
-        SetButtonNavigation(start, null, controls);
-        SetButtonNavigation(controls, start, settings);
-        SetButtonNavigation(settings, controls, quit);
-        SetButtonNavigation(quit, settings, null);
-    }
-
-    private static void SelectButton(Button button)
-    {
-        if (EventSystem.current != null)
-        {
-            EventSystem.current.SetSelectedGameObject(button == null ? null : button.gameObject);
-        }
-    }
-
-    private void HideLegacyUi()
-    {
-        if (legacyRoot == null)
-        {
-            return;
-        }
-
-        for (int index = 0; index < legacyRoot.childCount; index++)
-        {
-            legacyRoot.GetChild(index).gameObject.SetActive(false);
-        }
-    }
 }

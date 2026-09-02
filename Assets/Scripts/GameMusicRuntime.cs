@@ -29,10 +29,13 @@ public sealed class GameMusicRuntime : MonoBehaviour
     private float deathFadeElapsed;
     private float deathFadeDuration;
     private float deathRemainingSeconds;
+    private bool calmIntroPlaying;
+    private float calmIntroRemainingSeconds;
     private int activeGroup = -1;
     private bool missingLibraryWarningShown;
 
     public MusicMode CurrentMode => stateMachine == null ? MusicMode.Silent : stateMachine.Mode;
+    public bool AudioPermissionGranted => stateMachine != null && stateMachine.AudioPermissionGranted;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void InstallAtStartup()
@@ -93,10 +96,16 @@ public sealed class GameMusicRuntime : MonoBehaviour
 
     private void Update()
     {
+        if (GameplayInputActions.Current.UserGesturePressed)
+        {
+            stateMachine.RegisterAudioGesture();
+        }
+
         bool isPaused = IsMusicPaused();
         if (!isPaused)
         {
             stateMachine.Advance(Time.unscaledDeltaTime, false);
+            AdvanceCalmIntro(Time.unscaledDeltaTime);
             UpdateFades(Time.unscaledDeltaTime);
         }
 
@@ -179,14 +188,21 @@ public sealed class GameMusicRuntime : MonoBehaviour
         {
             case MusicCue.CalmIntro:
                 StartMode(library?.CalmIntro, library?.CalmLoop);
+                calmIntroPlaying = true;
+                calmIntroRemainingSeconds = library?.CalmIntro == null
+                    ? 0f
+                    : library.CalmIntro.length + (float)ScheduleLeadSeconds;
                 break;
             case MusicCue.CombatIntro:
+                StopCalmIntroPlayback();
                 StartMode(library?.CombatIntro, library?.CombatLoop);
                 break;
             case MusicCue.Death:
+                StopCalmIntroPlayback();
                 StartDeath();
                 break;
             case MusicCue.Silent:
+                StopCalmIntroPlayback();
                 FadeToSilence();
                 break;
         }
@@ -225,6 +241,7 @@ public sealed class GameMusicRuntime : MonoBehaviour
         {
             WarnMissingLibrary();
             FadeToSilence();
+            stateMachine.CompleteDeathPlayback();
             return;
         }
 
@@ -285,7 +302,26 @@ public sealed class GameMusicRuntime : MonoBehaviour
         if (deathRemainingSeconds <= 0f)
         {
             StopDeath();
+            stateMachine.CompleteDeathPlayback();
         }
+    }
+
+    private void AdvanceCalmIntro(float elapsedSeconds)
+    {
+        if (!calmIntroPlaying)
+        {
+            return;
+        }
+
+        calmIntroRemainingSeconds -= elapsedSeconds;
+        if (calmIntroRemainingSeconds > 0f)
+        {
+            return;
+        }
+
+        calmIntroPlaying = false;
+        calmIntroRemainingSeconds = 0f;
+        stateMachine.CompleteCalmIntro();
     }
 
     private void StopDeath()
@@ -301,6 +337,12 @@ public sealed class GameMusicRuntime : MonoBehaviour
         deathSource.Stop();
         deathSource.clip = null;
         deathSource.volume = 0f;
+    }
+
+    private void StopCalmIntroPlayback()
+    {
+        calmIntroPlaying = false;
+        calmIntroRemainingSeconds = 0f;
     }
 
     private void OnSettingsChanged(ArenaPlayerSettings settings)

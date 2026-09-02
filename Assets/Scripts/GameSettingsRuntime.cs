@@ -1,6 +1,7 @@
 using System;
 using RobotArena.Session;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using ArenaPlayerSettings = RobotArena.Session.PlayerSettings;
 
 public sealed class GameSettingsRuntime : MonoBehaviour
@@ -60,6 +61,14 @@ public sealed class GameSettingsRuntime : MonoBehaviour
         UpdateSettings(Current.WithGraphicsProfile(profile));
     }
 
+    public void MarkTutorialCompleted()
+    {
+        if (!Current.HasCompletedTutorial)
+        {
+            UpdateSettings(Current.WithTutorialCompleted());
+        }
+    }
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -73,6 +82,7 @@ public sealed class GameSettingsRuntime : MonoBehaviour
 
         store = new PlayerPrefsPlayerSettingsStore();
         Current = store.Load();
+        SceneManager.sceneLoaded += OnSceneLoaded;
         Apply(Current);
     }
 
@@ -80,8 +90,14 @@ public sealed class GameSettingsRuntime : MonoBehaviour
     {
         if (Instance == this)
         {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
             Instance = null;
         }
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Apply(Current);
     }
 
     private void UpdateSettings(ArenaPlayerSettings settings)

@@ -37,8 +37,7 @@ public class GunRotation : MonoBehaviour
         }
 
         if (!PauseMenu.GameIsPaused &&
-            !PauseMenu.PointerLockGestureConsumed &&
-            Cursor.lockState == CursorLockMode.Locked)
+            !PauseMenu.PointerLockGestureConsumed)
         {
             float lookY = GameplayInputActions.Current.Look.y;
             elevation = PlayerWeaponAim.ClampElevation(

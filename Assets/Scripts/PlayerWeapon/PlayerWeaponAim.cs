@@ -25,20 +25,5 @@ namespace RobotArena.PlayerWeapon
                 maxElevation);
         }
 
-        public static Vector3 DirectionToTarget(
-            Vector3 origin,
-            Vector3 target,
-            Vector3 fallback)
-        {
-            Vector3 displacement = target - origin;
-            if (displacement.sqrMagnitude > 0.0001f)
-            {
-                return displacement.normalized;
-            }
-
-            return fallback.sqrMagnitude > 0.0001f
-                ? fallback.normalized
-                : Vector3.forward;
-        }
     }
 }

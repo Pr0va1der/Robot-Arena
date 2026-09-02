@@ -12,7 +12,8 @@ public class PlayerShooting : MonoBehaviour
 
     [Header("Shooting Settings")]
     public GameObject bulletPrefab;
-    public Transform[] barrels;
+    public Transform firePointLeft;
+    public Transform firePointRight;
     public float shootForce = 50f;
     [FormerlySerializedAs("fireRate")]
     [Min(0.01f)] public float recoilCycleDuration = 0.25f;
@@ -40,6 +41,7 @@ public class PlayerShooting : MonoBehaviour
     private float nextUltimateTime;
     private float defaultAnimatorSpeed = 1f;
     private bool shootAnimationActive;
+    private bool volleyConfigurationErrorLogged;
 
     public float UltimateCooldownRemaining => Mathf.Max(0f, nextUltimateTime - Time.time);
     public bool IsUltimateReady => UltimateCooldownRemaining <= 0f;
@@ -91,17 +93,27 @@ public class PlayerShooting : MonoBehaviour
         }
 
         IGameplayInputActions inputActions = GameplayInputActions.Current;
+        bool fireVolleyAvailable = true;
+        if (inputActions.FireHeld)
+        {
+            fireVolleyAvailable = TryGetVolleyDirection(out _);
+            if (!fireVolleyAvailable)
+            {
+                LogVolleyConfigurationErrorOnce();
+            }
+        }
+
         PlayerWeaponCommand command = weaponController.Tick(
             Time.time,
             inputActions.FireHeld,
             inputActions.UltimatePressed,
-            IsUltimateReady);
+            IsUltimateReady,
+            fireVolleyAvailable);
 
         switch (command)
         {
             case PlayerWeaponCommand.FireVolley:
-                PlayShootAnimation();
-                FireBullets();
+                TryFireVolley();
                 break;
             case PlayerWeaponCommand.StartUltimate:
                 StartUltimate();
@@ -225,65 +237,76 @@ public class PlayerShooting : MonoBehaviour
         shootAnimationActive = false;
     }
 
-    private void FireBullets()
+    public bool TryGetVolleyDirection(out Vector3 direction)
     {
-        if (bulletPrefab == null || barrels == null || barrels.Length == 0)
+        direction = default;
+        if (bulletPrefab == null || firePointLeft == null || firePointRight == null)
+        {
+            return false;
+        }
+
+        if (laserPointer == null || !laserPointer.TryGetAimDirection(out direction))
+        {
+            direction = default;
+            return false;
+        }
+
+        return direction.sqrMagnitude > 0.0001f;
+    }
+
+    public bool TryFireVolley()
+    {
+        if (!TryGetVolleyDirection(out Vector3 direction))
+        {
+            LogVolleyConfigurationErrorOnce();
+            return false;
+        }
+
+        PlayShootAnimation();
+        FireBullets(direction);
+        return true;
+    }
+
+    private void FireBullets(Vector3 direction)
+    {
+        FireBullet(firePointLeft, direction);
+        FireBullet(firePointRight, direction);
+    }
+
+    private void FireBullet(Transform barrel, Vector3 direction)
+    {
+        GameObject bullet = Instantiate(
+            bulletPrefab,
+            barrel.position,
+            Quaternion.LookRotation(direction));
+        Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
+
+        if (bulletRb != null)
+        {
+            bulletRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            bulletRb.useGravity = false;
+            bulletRb.AddForce(direction * shootForce, ForceMode.Impulse);
+        }
+
+        Bullet bulletComponent = bullet.GetComponent<Bullet>();
+        if (bulletComponent != null)
+        {
+            bulletComponent.owner = gameObject;
+            bulletComponent.useGravity = false;
+        }
+
+        Destroy(bullet, 5f);
+    }
+
+    private void LogVolleyConfigurationErrorOnce()
+    {
+        if (volleyConfigurationErrorLogged)
         {
             return;
         }
 
-        Vector3 aimTarget = GetAimTarget();
-        foreach (Transform barrel in barrels)
-        {
-            if (barrel == null)
-            {
-                continue;
-            }
-
-            Vector3 direction = PlayerWeaponAim.DirectionToTarget(
-                barrel.position,
-                aimTarget,
-                barrel.forward);
-            GameObject bullet = Instantiate(
-                bulletPrefab,
-                barrel.position,
-                Quaternion.LookRotation(direction));
-            Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
-
-            if (bulletRb != null)
-            {
-                bulletRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-                bulletRb.useGravity = false;
-                bulletRb.AddForce(direction * shootForce, ForceMode.Impulse);
-            }
-
-            Bullet bulletComponent = bullet.GetComponent<Bullet>();
-            if (bulletComponent != null)
-            {
-                bulletComponent.owner = gameObject;
-                bulletComponent.useGravity = false;
-            }
-
-            Destroy(bullet, 5f);
-        }
-    }
-
-    private Vector3 GetAimTarget()
-    {
-        if (laserPointer != null && laserPointer.TryGetAimTarget(out Vector3 target))
-        {
-            return target;
-        }
-
-        foreach (Transform barrel in barrels)
-        {
-            if (barrel != null)
-            {
-                return barrel.position + barrel.forward * 100f;
-            }
-        }
-
-        return transform.position + transform.forward * 100f;
+        volleyConfigurationErrorLogged = true;
+        Debug.LogError("PlayerShooting requires a bullet, left and right barrels, and a valid laser direction for a normal volley.");
     }
 
     private void ApplyUltimateForce()

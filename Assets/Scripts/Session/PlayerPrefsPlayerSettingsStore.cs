@@ -6,7 +6,7 @@ namespace RobotArena.Session
     public sealed class PlayerPrefsPlayerSettingsStore : IPlayerSettingsStore
     {
         public const int LegacySchemaVersion = 1;
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
         public const string DefaultKeyPrefix = "RobotArena.Settings";
 
         private readonly GameLanguage defaultLanguage;
@@ -37,6 +37,7 @@ namespace RobotArena.Session
             SfxVolumeKey = keyPrefix + ".SfxVolume";
             MutedKey = keyPrefix + ".Muted";
             GraphicsProfileKey = keyPrefix + ".GraphicsProfile";
+            TutorialCompletedKey = keyPrefix + ".TutorialCompleted";
             currentKeys = new[]
             {
                 SchemaVersionKey,
@@ -45,7 +46,8 @@ namespace RobotArena.Session
                 MusicVolumeKey,
                 SfxVolumeKey,
                 MutedKey,
-                GraphicsProfileKey
+                GraphicsProfileKey,
+                TutorialCompletedKey
             };
         }
 
@@ -56,6 +58,7 @@ namespace RobotArena.Session
         public string SfxVolumeKey { get; }
         public string MutedKey { get; }
         public string GraphicsProfileKey { get; }
+        public string TutorialCompletedKey { get; }
 
         public PlayerSettings Load()
         {
@@ -95,6 +98,7 @@ namespace RobotArena.Session
             PlayerPrefs.SetFloat(SfxVolumeKey, settings.SfxVolume);
             PlayerPrefs.SetInt(MutedKey, settings.IsMuted ? 1 : 0);
             PlayerPrefs.SetInt(GraphicsProfileKey, (int)settings.GraphicsProfile);
+            PlayerPrefs.SetInt(TutorialCompletedKey, settings.HasCompletedTutorial ? 1 : 0);
             PlayerPrefs.Save();
         }
 
@@ -142,7 +146,8 @@ namespace RobotArena.Session
                 ReadFloat(MusicVolumeKey, defaults.MusicVolume),
                 ReadFloat(SfxVolumeKey, defaults.SfxVolume),
                 ReadBool(MutedKey, defaults.IsMuted),
-                defaults.GraphicsProfile);
+                defaults.GraphicsProfile,
+                false);
         }
 
         private PlayerSettings ReadCurrentSettings(PlayerSettings defaults)
@@ -153,7 +158,8 @@ namespace RobotArena.Session
                 ReadFloat(MusicVolumeKey, defaults.MusicVolume),
                 ReadFloat(SfxVolumeKey, defaults.SfxVolume),
                 ReadBool(MutedKey, defaults.IsMuted),
-                ReadGraphicsProfile(defaults.GraphicsProfile));
+                ReadGraphicsProfile(defaults.GraphicsProfile),
+                ReadBool(TutorialCompletedKey, defaults.HasCompletedTutorial));
         }
 
         private bool HasStoredValue()

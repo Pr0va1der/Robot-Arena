@@ -61,7 +61,7 @@ public sealed class DesktopSettingsUi : MonoBehaviour
 
         gameObject.SetActive(true);
         Refresh();
-        SelectButton(masterVolumeSlider);
+        DesktopUiFactory.Select(masterVolumeSlider);
     }
 
     public void Hide()
@@ -153,17 +153,16 @@ public sealed class DesktopSettingsUi : MonoBehaviour
 
     private void CreateUi()
     {
-        GameObject card = DesktopUiFactory.CreatePanel("Card", transform, CardColor, true);
-        SetCenter(card.GetComponent<RectTransform>(), Vector2.zero, new Vector2(860f, 760f));
+        GameObject card = DesktopUiFactory.CreateCard("Card", transform, CardColor, new Vector2(860f, 760f));
 
-        titleText = CreateText(
-            card.transform,
+        titleText = DesktopUiFactory.CreatePositionedText(
             "Title",
+            card.transform,
             string.Empty,
             46f,
+            AccentColor,
             new Vector2(0f, 300f),
-            new Vector2(780f, 70f),
-            AccentColor);
+            new Vector2(780f, 70f));
 
         CreateAudioRow(
             card.transform,
@@ -194,16 +193,16 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             new Vector2(360f, 54f),
             ButtonColor,
             ToggleMute);
-        SetCenter(muteButton.GetComponent<RectTransform>(), new Vector2(0f, 22f), new Vector2(360f, 54f));
+        DesktopUiFactory.SetCenter(muteButton.GetComponent<RectTransform>(), new Vector2(0f, 22f), new Vector2(360f, 54f));
 
-        languageText = CreateText(
-            card.transform,
+        languageText = DesktopUiFactory.CreatePositionedText(
             "LanguageLabel",
+            card.transform,
             string.Empty,
             24f,
+            Color.white,
             new Vector2(-245f, -46f),
             new Vector2(220f, 42f),
-            Color.white,
             TextAlignmentOptions.Left);
         russianButton = DesktopUiFactory.CreateButton(
             "RussianButton",
@@ -212,7 +211,7 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             new Vector2(210f, 54f),
             ButtonColor,
             SetRussian);
-        SetCenter(russianButton.GetComponent<RectTransform>(), new Vector2(-105f, -96f), new Vector2(210f, 54f));
+        DesktopUiFactory.SetCenter(russianButton.GetComponent<RectTransform>(), new Vector2(-105f, -96f), new Vector2(210f, 54f));
         englishButton = DesktopUiFactory.CreateButton(
             "EnglishButton",
             card.transform,
@@ -220,16 +219,16 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             new Vector2(210f, 54f),
             ButtonColor,
             SetEnglish);
-        SetCenter(englishButton.GetComponent<RectTransform>(), new Vector2(105f, -96f), new Vector2(210f, 54f));
+        DesktopUiFactory.SetCenter(englishButton.GetComponent<RectTransform>(), new Vector2(105f, -96f), new Vector2(210f, 54f));
 
-        graphicsText = CreateText(
-            card.transform,
+        graphicsText = DesktopUiFactory.CreatePositionedText(
             "GraphicsLabel",
+            card.transform,
             string.Empty,
             24f,
+            Color.white,
             new Vector2(-245f, -166f),
             new Vector2(300f, 42f),
-            Color.white,
             TextAlignmentOptions.Left);
         performanceButton = DesktopUiFactory.CreateButton(
             "PerformanceButton",
@@ -238,7 +237,7 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             new Vector2(250f, 54f),
             ButtonColor,
             SetPerformanceProfile);
-        SetCenter(performanceButton.GetComponent<RectTransform>(), new Vector2(-130f, -216f), new Vector2(250f, 54f));
+        DesktopUiFactory.SetCenter(performanceButton.GetComponent<RectTransform>(), new Vector2(-130f, -216f), new Vector2(250f, 54f));
         qualityButton = DesktopUiFactory.CreateButton(
             "QualityButton",
             card.transform,
@@ -246,7 +245,7 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             new Vector2(250f, 54f),
             ButtonColor,
             SetQualityProfile);
-        SetCenter(qualityButton.GetComponent<RectTransform>(), new Vector2(130f, -216f), new Vector2(250f, 54f));
+        DesktopUiFactory.SetCenter(qualityButton.GetComponent<RectTransform>(), new Vector2(130f, -216f), new Vector2(250f, 54f));
 
         closeButton = DesktopUiFactory.CreateButton(
             "CloseButton",
@@ -255,7 +254,7 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             new Vector2(360f, 58f),
             ButtonColor,
             Close);
-        SetCenter(closeButton.GetComponent<RectTransform>(), new Vector2(0f, -310f), new Vector2(360f, 58f));
+        DesktopUiFactory.SetCenter(closeButton.GetComponent<RectTransform>(), new Vector2(0f, -310f), new Vector2(360f, 58f));
         ConfigureNavigation();
     }
 
@@ -267,14 +266,14 @@ public sealed class DesktopSettingsUi : MonoBehaviour
         float y,
         Action<float> onValueChanged)
     {
-        label = CreateText(
-            parent,
+        label = DesktopUiFactory.CreatePositionedText(
             name + "Label",
+            parent,
             string.Empty,
             22f,
+            Color.white,
             new Vector2(-245f, y),
             new Vector2(300f, 38f),
-            Color.white,
             TextAlignmentOptions.Left);
         slider = DesktopUiFactory.CreateSlider(
             name + "Slider",
@@ -283,20 +282,20 @@ public sealed class DesktopSettingsUi : MonoBehaviour
             SliderFillColor,
             AccentColor,
             onValueChanged);
-        SetCenter(slider.GetComponent<RectTransform>(), new Vector2(145f, y), new Vector2(430f, 32f));
+        DesktopUiFactory.SetCenter(slider.GetComponent<RectTransform>(), new Vector2(145f, y), new Vector2(430f, 32f));
     }
 
     private void ConfigureNavigation()
     {
-        SetSelectableNavigation(masterVolumeSlider, null, musicVolumeSlider);
-        SetSelectableNavigation(musicVolumeSlider, masterVolumeSlider, sfxVolumeSlider);
-        SetSelectableNavigation(sfxVolumeSlider, musicVolumeSlider, russianButton);
-        SetButtonNavigation(russianButton, null, englishButton);
-        SetButtonNavigation(englishButton, russianButton, muteButton);
-        SetButtonNavigation(muteButton, englishButton, performanceButton);
-        SetButtonNavigation(performanceButton, muteButton, qualityButton);
-        SetButtonNavigation(qualityButton, performanceButton, closeButton);
-        SetButtonNavigation(closeButton, qualityButton, null);
+        DesktopUiFactory.SetNavigation(masterVolumeSlider, null, musicVolumeSlider);
+        DesktopUiFactory.SetNavigation(musicVolumeSlider, masterVolumeSlider, sfxVolumeSlider);
+        DesktopUiFactory.SetNavigation(sfxVolumeSlider, musicVolumeSlider, russianButton);
+        DesktopUiFactory.SetNavigation(russianButton, null, englishButton);
+        DesktopUiFactory.SetNavigation(englishButton, russianButton, muteButton);
+        DesktopUiFactory.SetNavigation(muteButton, englishButton, performanceButton);
+        DesktopUiFactory.SetNavigation(performanceButton, muteButton, qualityButton);
+        DesktopUiFactory.SetNavigation(qualityButton, performanceButton, closeButton);
+        DesktopUiFactory.SetNavigation(closeButton, qualityButton, null);
     }
 
     private string Localize(LocalizationKey key)
@@ -316,45 +315,4 @@ public sealed class DesktopSettingsUi : MonoBehaviour
         button.colors = colors;
     }
 
-    private static TextMeshProUGUI CreateText(
-        Transform parent,
-        string name,
-        string value,
-        float fontSize,
-        Vector2 position,
-        Vector2 size,
-        Color color,
-        TextAlignmentOptions alignment = TextAlignmentOptions.Center)
-    {
-        TextMeshProUGUI text = DesktopUiFactory.CreateText(name, parent, value, fontSize, color, alignment);
-        SetCenter(text.rectTransform, position, size);
-        return text;
-    }
-
-    private static void SetCenter(RectTransform rectTransform, Vector2 position, Vector2 size)
-    {
-        DesktopUiFactory.SetCenter(rectTransform, position, size);
-    }
-
-    private static void SetButtonNavigation(Button button, Selectable up, Selectable down)
-    {
-        SetSelectableNavigation(button, up, down);
-    }
-
-    private static void SetSelectableNavigation(Selectable selectable, Selectable up, Selectable down)
-    {
-        Navigation navigation = selectable.navigation;
-        navigation.mode = Navigation.Mode.Explicit;
-        navigation.selectOnUp = up;
-        navigation.selectOnDown = down;
-        selectable.navigation = navigation;
-    }
-
-    private static void SelectButton(Selectable selectable)
-    {
-        if (EventSystem.current != null)
-        {
-            EventSystem.current.SetSelectedGameObject(selectable == null ? null : selectable.gameObject);
-        }
-    }
 }

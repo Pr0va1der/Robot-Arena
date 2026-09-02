@@ -11,6 +11,7 @@ public interface IGameplayInputActions
     bool UltimatePressed { get; }
     bool PausePressed { get; }
     bool SubmitPressed { get; }
+    bool UserGesturePressed { get; }
     bool PointerGesturePressed { get; }
 }
 

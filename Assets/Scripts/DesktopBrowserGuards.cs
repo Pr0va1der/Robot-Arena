@@ -10,15 +10,20 @@ public sealed class DesktopBrowserGuards : MonoBehaviour
 {
     private static bool installed;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void InstallForDesktopWebGl()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void InstallSceneHook()
+    {
+        SceneManager.sceneLoaded -= InstallForDesktopWebGl;
+        SceneManager.sceneLoaded += InstallForDesktopWebGl;
+    }
+
+    private static void InstallForDesktopWebGl(Scene activeScene, LoadSceneMode mode)
     {
         if (installed || Application.isMobilePlatform)
         {
             return;
         }
 
-        Scene activeScene = SceneManager.GetActiveScene();
         if (activeScene.name != "Title Screen" && activeScene.name != "SampleScene")
         {
             return;

@@ -21,6 +21,29 @@ public static class DesktopUiFactory
         return panel;
     }
 
+    public static GameObject CreateOverlay(
+        string name,
+        Transform parent,
+        Color color)
+    {
+        GameObject panel = CreateFullScreenRoot(name, parent, false);
+        Image image = panel.GetComponent<Image>();
+        image.color = color;
+        image.raycastTarget = true;
+        return panel;
+    }
+
+    public static GameObject CreateCard(
+        string name,
+        Transform parent,
+        Color color,
+        Vector2 size)
+    {
+        GameObject card = CreatePanel(name, parent, color, true);
+        SetCenter(card.GetComponent<RectTransform>(), Vector2.zero, size);
+        return card;
+    }
+
     public static TextMeshProUGUI CreateText(
         string name,
         Transform parent,
@@ -82,6 +105,37 @@ public static class DesktopUiFactory
         }
 
         return button;
+    }
+
+    public static TextMeshProUGUI CreatePositionedText(
+        string name,
+        Transform parent,
+        string value,
+        float fontSize,
+        Color color,
+        Vector2 position,
+        Vector2 size,
+        TextAlignmentOptions alignment = TextAlignmentOptions.Center)
+    {
+        TextMeshProUGUI text = CreateText(name, parent, value, fontSize, color, alignment);
+        SetCenter(text.rectTransform, position, size);
+        return text;
+    }
+
+    public static void BindPointerDown(Button button, Action action)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        DesktopPointerDownHandler handler = button.GetComponent<DesktopPointerDownHandler>();
+        if (handler == null)
+        {
+            handler = button.gameObject.AddComponent<DesktopPointerDownHandler>();
+        }
+
+        handler.Bind(action);
     }
 
     public static TextMeshProUGUI GetButtonLabel(Button button)
@@ -188,6 +242,68 @@ public static class DesktopUiFactory
         rectTransform.sizeDelta = size;
     }
 
+    public static void SetAnchor(
+        RectTransform rectTransform,
+        Vector2 anchor,
+        Vector2 pivot,
+        Vector2 position,
+        Vector2 size)
+    {
+        rectTransform.anchorMin = anchor;
+        rectTransform.anchorMax = anchor;
+        rectTransform.pivot = pivot;
+        rectTransform.anchoredPosition = position;
+        rectTransform.sizeDelta = size;
+    }
+
+    public static void ConfigureVerticalNavigation(params Button[] buttons)
+    {
+        if (buttons == null)
+        {
+            return;
+        }
+
+        for (int index = 0; index < buttons.Length; index++)
+        {
+            Button button = buttons[index];
+            if (button == null)
+            {
+                continue;
+            }
+
+            SetNavigation(
+                button,
+                index > 0 ? buttons[index - 1] : null,
+                index + 1 < buttons.Length ? buttons[index + 1] : null);
+        }
+    }
+
+    public static void SetNavigation(
+        Selectable selectable,
+        Selectable up,
+        Selectable down)
+    {
+        if (selectable == null)
+        {
+            return;
+        }
+
+        Navigation navigation = selectable.navigation;
+        navigation.mode = Navigation.Mode.Explicit;
+        navigation.selectOnUp = up;
+        navigation.selectOnDown = down;
+        selectable.navigation = navigation;
+    }
+
+    public static void Select(Selectable selectable)
+    {
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(
+                selectable == null ? null : selectable.gameObject);
+        }
+    }
+
     public static EventSystem EnsureEventSystem()
     {
         if (EventSystem.current != null)
@@ -204,5 +320,20 @@ public static class DesktopUiFactory
         EventSystem eventSystem = eventSystemObject.AddComponent<EventSystem>();
         eventSystemObject.AddComponent<StandaloneInputModule>();
         return eventSystem;
+    }
+}
+
+internal sealed class DesktopPointerDownHandler : MonoBehaviour, IPointerDownHandler
+{
+    private Action action;
+
+    public void Bind(Action callback)
+    {
+        action = callback;
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        action?.Invoke();
     }
 }

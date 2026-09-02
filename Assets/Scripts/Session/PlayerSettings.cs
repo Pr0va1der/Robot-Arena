@@ -11,6 +11,25 @@ namespace RobotArena.Session
             float sfxVolume,
             bool isMuted,
             GraphicsQualityProfile graphicsProfile)
+            : this(
+                language,
+                masterVolume,
+                musicVolume,
+                sfxVolume,
+                isMuted,
+                graphicsProfile,
+                false)
+        {
+        }
+
+        public PlayerSettings(
+            GameLanguage language,
+            float masterVolume,
+            float musicVolume,
+            float sfxVolume,
+            bool isMuted,
+            GraphicsQualityProfile graphicsProfile,
+            bool hasCompletedTutorial)
         {
             Language = GameLanguageResolver.Normalize(language);
             MasterVolume = NormalizeVolume(masterVolume);
@@ -18,6 +37,7 @@ namespace RobotArena.Session
             SfxVolume = NormalizeVolume(sfxVolume);
             IsMuted = isMuted;
             GraphicsProfile = GraphicsQualityProfileCatalog.Normalize(graphicsProfile);
+            HasCompletedTutorial = hasCompletedTutorial;
         }
 
         public GameLanguage Language { get; }
@@ -26,6 +46,7 @@ namespace RobotArena.Session
         public float SfxVolume { get; }
         public bool IsMuted { get; }
         public GraphicsQualityProfile GraphicsProfile { get; }
+        public bool HasCompletedTutorial { get; }
 
         public static PlayerSettings CreateDefaults(GameLanguage language)
         {
@@ -48,7 +69,8 @@ namespace RobotArena.Session
                 MusicVolume,
                 SfxVolume,
                 IsMuted,
-                GraphicsProfile);
+                GraphicsProfile,
+                HasCompletedTutorial);
         }
 
         public PlayerSettings WithMasterVolume(float volume)
@@ -59,7 +81,8 @@ namespace RobotArena.Session
                 MusicVolume,
                 SfxVolume,
                 IsMuted,
-                GraphicsProfile);
+                GraphicsProfile,
+                HasCompletedTutorial);
         }
 
         public PlayerSettings WithMusicVolume(float volume)
@@ -70,7 +93,8 @@ namespace RobotArena.Session
                 volume,
                 SfxVolume,
                 IsMuted,
-                GraphicsProfile);
+                GraphicsProfile,
+                HasCompletedTutorial);
         }
 
         public PlayerSettings WithSfxVolume(float volume)
@@ -81,7 +105,8 @@ namespace RobotArena.Session
                 MusicVolume,
                 volume,
                 IsMuted,
-                GraphicsProfile);
+                GraphicsProfile,
+                HasCompletedTutorial);
         }
 
         public PlayerSettings WithMuted(bool isMuted)
@@ -92,7 +117,8 @@ namespace RobotArena.Session
                 MusicVolume,
                 SfxVolume,
                 isMuted,
-                GraphicsProfile);
+                GraphicsProfile,
+                HasCompletedTutorial);
         }
 
         public PlayerSettings WithGraphicsProfile(GraphicsQualityProfile graphicsProfile)
@@ -103,7 +129,20 @@ namespace RobotArena.Session
                 MusicVolume,
                 SfxVolume,
                 IsMuted,
-                graphicsProfile);
+                graphicsProfile,
+                HasCompletedTutorial);
+        }
+
+        public PlayerSettings WithTutorialCompleted()
+        {
+            return new PlayerSettings(
+                Language,
+                MasterVolume,
+                MusicVolume,
+                SfxVolume,
+                IsMuted,
+                GraphicsProfile,
+                true);
         }
 
         public bool Equals(PlayerSettings other)
@@ -113,7 +152,8 @@ namespace RobotArena.Session
                    MusicVolume.Equals(other.MusicVolume) &&
                    SfxVolume.Equals(other.SfxVolume) &&
                    IsMuted == other.IsMuted &&
-                   GraphicsProfile == other.GraphicsProfile;
+                   GraphicsProfile == other.GraphicsProfile &&
+                   HasCompletedTutorial == other.HasCompletedTutorial;
         }
 
         public override bool Equals(object obj)
@@ -131,6 +171,7 @@ namespace RobotArena.Session
                 hash = (hash * 397) ^ SfxVolume.GetHashCode();
                 hash = (hash * 397) ^ IsMuted.GetHashCode();
                 hash = (hash * 397) ^ (int)GraphicsProfile;
+                hash = (hash * 397) ^ HasCompletedTutorial.GetHashCode();
                 return hash;
             }
         }

@@ -86,7 +86,7 @@ namespace RobotArena.Session
                 throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
             }
 
-            if (pauseCoordinator.IsPaused)
+            if (pauseCoordinator.IsGameplayPaused)
             {
                 return;
             }

@@ -34,7 +34,7 @@ namespace RobotArena.Session.Tests
                     string value = LocalizationCatalog.Get(language, key);
                     foreach (char character in value)
                     {
-                        if (char.IsControl(character) || font.HasCharacter(character, true))
+                        if (char.IsControl(character) || font.HasCharacter(character, false))
                         {
                             continue;
                         }

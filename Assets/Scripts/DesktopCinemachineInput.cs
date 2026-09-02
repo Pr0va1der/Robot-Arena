@@ -1,16 +1,23 @@
 using Cinemachine;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Bridges the platform-neutral gameplay look action into Cinemachine's axis provider seam.
 /// </summary>
 public sealed class DesktopCinemachineInput : MonoBehaviour, AxisState.IInputAxisProvider
 {
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void InstallForSampleScene()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void InstallSceneHook()
+    {
+        SceneManager.sceneLoaded -= InstallForSampleScene;
+        SceneManager.sceneLoaded += InstallForSampleScene;
+    }
+
+    private static void InstallForSampleScene(Scene scene, LoadSceneMode mode)
     {
         if (Application.isMobilePlatform ||
-            UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "SampleScene")
+            scene.name != "SampleScene")
         {
             return;
         }
@@ -30,7 +37,10 @@ public sealed class DesktopCinemachineInput : MonoBehaviour, AxisState.IInputAxi
 
     public float GetAxisValue(int axis)
     {
-        if (!enabled || PauseMenu.GameIsPaused || Cursor.lockState != CursorLockMode.Locked)
+        if (!enabled ||
+            PauseMenu.GameIsPaused ||
+            PauseMenu.PointerLockGestureConsumed ||
+            Cursor.lockState != CursorLockMode.Locked)
         {
             return 0f;
         }

@@ -9,37 +9,68 @@ namespace RobotArena.Session
             PauseSource.Focus |
             PauseSource.Platform |
             PauseSource.Advertisement |
-            PauseSource.Result;
+            PauseSource.Result |
+            PauseSource.Tutorial;
         private const PauseSource SystemSources =
             PauseSource.Focus |
             PauseSource.Platform |
             PauseSource.Advertisement;
+        private const PauseSource NonAudioSources =
+            PauseSource.Result |
+            PauseSource.Tutorial;
 
         private PauseSource activeSources;
         private bool requiresPointerLockClick;
 
-        public event Action<bool> PauseStateChanged;
+        public event Action PauseStateChanged;
 
         public bool IsPaused => activeSources != PauseSource.None;
-        public bool IsAudioPaused => (activeSources & ~PauseSource.Result) != PauseSource.None;
+        public bool IsGameplayPaused => IsPaused || requiresPointerLockClick;
+        public bool IsWaitingForResume => !IsPaused && requiresPointerLockClick;
+        public bool IsAudioPaused => (activeSources & ~NonAudioSources) != PauseSource.None;
         public PauseSource ActiveSources => activeSources;
         public bool RequiresPointerLockClick => requiresPointerLockClick;
 
         public void RequirePointerLockClick()
         {
+            if (requiresPointerLockClick)
+            {
+                return;
+            }
+
+            PauseState previousState = CaptureState();
             requiresPointerLockClick = true;
+            NotifyIfStateChanged(previousState);
+        }
+
+        public void ClearResumeRequirement()
+        {
+            if (!requiresPointerLockClick)
+            {
+                return;
+            }
+
+            PauseState previousState = CaptureState();
+            requiresPointerLockClick = false;
+            NotifyIfStateChanged(previousState);
         }
 
         public void SetSource(PauseSource source, bool isActive)
         {
             ValidateSource(source);
 
+            PauseState previousState = CaptureState();
+
             if (isActive && (source & SystemSources) != PauseSource.None)
             {
                 requiresPointerLockClick = true;
             }
 
-            PauseSource previousSources = activeSources;
+            if (isActive && (source & PauseSource.Result) != PauseSource.None)
+            {
+                requiresPointerLockClick = false;
+            }
+
             if (isActive)
             {
                 activeSources |= source;
@@ -49,10 +80,7 @@ namespace RobotArena.Session
                 activeSources &= ~source;
             }
 
-            if (previousSources != activeSources)
-            {
-                PauseStateChanged?.Invoke(IsPaused);
-            }
+            NotifyIfStateChanged(previousState);
         }
 
         public bool IsSourceActive(PauseSource source)
@@ -68,8 +96,23 @@ namespace RobotArena.Session
                 return false;
             }
 
+            PauseState previousState = CaptureState();
             requiresPointerLockClick = false;
+            NotifyIfStateChanged(previousState);
             return true;
+        }
+
+        private PauseState CaptureState()
+        {
+            return new PauseState(IsPaused, IsGameplayPaused, IsAudioPaused);
+        }
+
+        private void NotifyIfStateChanged(PauseState previousState)
+        {
+            if (previousState.HasChanged(this))
+            {
+                PauseStateChanged?.Invoke();
+            }
         }
 
         private static void ValidateSource(PauseSource source)
@@ -77,6 +120,27 @@ namespace RobotArena.Session
             if (source == PauseSource.None || (source & ~KnownSources) != PauseSource.None)
             {
                 throw new ArgumentOutOfRangeException(nameof(source));
+            }
+        }
+
+        private readonly struct PauseState
+        {
+            public PauseState(bool isPaused, bool isGameplayPaused, bool isAudioPaused)
+            {
+                IsPaused = isPaused;
+                IsGameplayPaused = isGameplayPaused;
+                IsAudioPaused = isAudioPaused;
+            }
+
+            private bool IsPaused { get; }
+            private bool IsGameplayPaused { get; }
+            private bool IsAudioPaused { get; }
+
+            public bool HasChanged(PauseCoordinator current)
+            {
+                return IsPaused != current.IsPaused ||
+                       IsGameplayPaused != current.IsGameplayPaused ||
+                       IsAudioPaused != current.IsAudioPaused;
             }
         }
     }

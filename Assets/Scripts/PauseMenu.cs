@@ -9,10 +9,6 @@ public class PauseMenu : MonoBehaviour
     public static bool AudioIsPaused { get; private set; }
     public static bool PointerLockGestureConsumed { get; private set; }
 
-    [Header("UI Elements")]
-    public GameObject pauseMenuUI;
-    public GameObject ingameUI;
-
     private readonly PauseCoordinator pauseCoordinator = new PauseCoordinator();
     private bool focusWasLost;
     private bool applicationWasPaused;
@@ -21,6 +17,7 @@ public class PauseMenu : MonoBehaviour
 
     public PauseCoordinator PauseCoordinator => pauseCoordinator;
     public bool IsPaused => pauseCoordinator.IsPaused;
+    public bool IsGameplayPaused => pauseCoordinator.IsGameplayPaused;
     public bool IsAudioPaused => pauseCoordinator.IsAudioPaused;
     public PauseSource ActivePauseSources => pauseCoordinator.ActiveSources;
     public bool RequiresPointerLockClick => pauseCoordinator.RequiresPointerLockClick;
@@ -42,21 +39,6 @@ public class PauseMenu : MonoBehaviour
         }
 
         desktopUi.Bind(this);
-    }
-
-    private void Start()
-    {
-        if (pauseMenuUI != null)
-        {
-            pauseMenuUI.SetActive(false);
-        }
-
-        if (ingameUI != null)
-        {
-            ingameUI.SetActive(true);
-        }
-
-        ApplyPauseState(pauseCoordinator.IsPaused);
     }
 
     private void Update()
@@ -81,24 +63,16 @@ public class PauseMenu : MonoBehaviour
         }
     }
 
-    public void ConfigureUi(GameObject pauseUi, GameObject gameplayUi)
-    {
-        pauseMenuUI = pauseUi;
-        ingameUI = gameplayUi;
-        UpdatePauseUi();
-    }
-
     public void SetTutorialMode(bool isActive)
     {
         tutorialMode = isActive;
-        UpdatePauseUi();
+        SetPauseSource(PauseSource.Tutorial, isActive);
     }
 
     public void SetResultMode(bool isActive)
     {
         resultMode = isActive;
         SetPauseSource(PauseSource.Result, isActive);
-        UpdatePauseUi();
     }
 
     public void RequirePointerLockClick()
@@ -129,8 +103,20 @@ public class PauseMenu : MonoBehaviour
 
     public void Resume()
     {
+        if (!pauseCoordinator.IsPaused && !pauseCoordinator.RequiresPointerLockClick)
+        {
+            return;
+        }
+
         pauseCoordinator.RequirePointerLockClick();
         SetPauseSource(PauseSource.User, false);
+    }
+
+    public bool ResumeFromPointerGesture()
+    {
+        pauseCoordinator.RequirePointerLockClick();
+        SetPauseSource(PauseSource.User, false);
+        return TryAcquirePointerLockFromUserGesture();
     }
 
     public void SetPlatformPaused(bool isPaused)
@@ -164,19 +150,20 @@ public class PauseMenu : MonoBehaviour
         UpdateLifecyclePause(PauseSource.Platform, isPaused, ref applicationWasPaused);
     }
 
-    private void OnPauseStateChanged(bool isPaused)
+    private void OnPauseStateChanged()
     {
-        ApplyPauseState(isPaused);
+        ApplyPauseState();
     }
 
-    private void ApplyPauseState(bool isPaused)
+    private void ApplyPauseState()
     {
-        GameIsPaused = isPaused;
+        bool gameplayPaused = pauseCoordinator.IsGameplayPaused;
+        GameIsPaused = gameplayPaused;
         AudioIsPaused = pauseCoordinator.IsAudioPaused;
-        Time.timeScale = isPaused ? 0f : 1f;
+        Time.timeScale = gameplayPaused ? 0f : 1f;
         AudioListener.pause = AudioIsPaused;
 
-        if (isPaused || pauseCoordinator.RequiresPointerLockClick)
+        if (gameplayPaused || pauseCoordinator.RequiresPointerLockClick)
         {
             UnlockPointer();
         }
@@ -185,21 +172,6 @@ public class PauseMenu : MonoBehaviour
             LockPointer();
         }
 
-        UpdatePauseUi();
-    }
-
-    private void UpdatePauseUi()
-    {
-        bool userPaused = pauseCoordinator.IsSourceActive(PauseSource.User);
-        if (pauseMenuUI != null)
-        {
-            pauseMenuUI.SetActive(userPaused && !tutorialMode && !resultMode);
-        }
-
-        if (ingameUI != null)
-        {
-            ingameUI.SetActive(!userPaused && !tutorialMode && !resultMode);
-        }
     }
 
     private void UpdateLifecyclePause(PauseSource source, bool isPaused, ref bool wasPaused)
@@ -242,6 +214,7 @@ public class PauseMenu : MonoBehaviour
         GameMusicRuntime.GetOrCreate().BeginFreshCalm();
         SetPauseSource(PauseSource.Result, false);
         SetPauseSource(PauseSource.User, false);
+        pauseCoordinator.ClearResumeRequirement();
         Time.timeScale = 1f;
         AudioListener.pause = false;
         SceneManager.LoadScene("Title Screen");

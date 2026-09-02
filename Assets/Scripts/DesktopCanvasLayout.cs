@@ -40,6 +40,10 @@ public sealed class DesktopCanvasLayout : MonoBehaviour
 
     private void ConfigureCanvas()
     {
+        // Screen-space canvases must keep a unit transform. The legacy scenes
+        // serialized this root at zero scale, which would also hide runtime UI.
+        transform.localScale = Vector3.one;
+
         CanvasScaler scaler = GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(ReferenceWidth, ReferenceHeight);

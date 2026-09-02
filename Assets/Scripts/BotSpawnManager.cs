@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using RobotArena.Session;
-using TMPro;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotRegistry, IPlayerRecovery
 {
@@ -14,12 +12,6 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     [Header("Bots")]
     public GameObject botPrefab;
     public Transform spawnPointsRoot;
-
-    [Header("UI")]
-    public TextMeshProUGUI botsCounterText;
-    [FormerlySerializedAs("waveTimerText")]
-    public TextMeshProUGUI spawnTimerText;
-    public GameObject winScreen;
 
     private readonly List<Transform> spawnPoints = new List<Transform>();
     private SessionOrchestrator session;
@@ -56,6 +48,7 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         {
             bot.Connect(this);
             initialBots.Add(bot.Id);
+            BotCombatReporter.Ensure(bot.gameObject)?.EnterCombat();
         }
 
         session.StartSession(initialBots);
@@ -63,26 +56,11 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         {
             playerHealth.Died += OnPlayerDied;
         }
-
-        if (spawnTimerText != null)
-        {
-            spawnTimerText.gameObject.SetActive(true);
-        }
     }
 
     private void Update()
     {
         session?.Advance(Time.deltaTime);
-
-        if (botsCounterText != null)
-        {
-            botsCounterText.text = $"Волна {CurrentWaveNumber}/{TotalWaves} · Ботов осталось: {LiveBotCount}";
-        }
-
-        if (spawnTimerText != null)
-        {
-            UpdateStateText();
-        }
     }
 
     private void OnDestroy()
@@ -199,66 +177,8 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
         }
     }
 
-    private void UpdateStateText()
-    {
-        if (State == SessionState.Spawning)
-        {
-            spawnTimerText.text = $"Появление: {Mathf.CeilToInt(session.SpawnTimeRemaining)}";
-        }
-        else if (State == SessionState.Clearing)
-        {
-            spawnTimerText.text = "Зачистите оставшихся ботов";
-        }
-        else if (State == SessionState.Intermission)
-        {
-            spawnTimerText.text = $"Следующая волна через: {Mathf.CeilToInt(session.IntermissionTimeRemaining)}";
-        }
-    }
-
     private void OnSessionStateChanged(SessionState state)
     {
         SessionStateChanged?.Invoke(state);
-
-        if ((state == SessionState.Won || state == SessionState.Lost) && spawnTimerText != null)
-        {
-            spawnTimerText.gameObject.SetActive(false);
-        }
-
-        if (DesktopArenaUi.Instance != null)
-        {
-            return;
-        }
-
-        if (state == SessionState.Won)
-        {
-            ShowVictoryScreen();
-        }
-        else if (state == SessionState.Lost && playerHealth != null && playerHealth.deathScreen != null)
-        {
-            if (Result.HasValue)
-            {
-                playerHealth.deathScreen.SetResult(Result.Value, BestTime);
-            }
-
-            playerHealth.deathScreen.ShowDeathScreen();
-        }
-    }
-
-    private void ShowVictoryScreen()
-    {
-        if (winScreen != null)
-        {
-            WinScreen resultScreen = winScreen.GetComponentInParent<WinScreen>(true);
-            if (resultScreen != null && Result.HasValue)
-            {
-                resultScreen.SetResult(Result.Value, BestTime);
-            }
-
-            winScreen.SetActive(true);
-        }
-
-        Cursor.visible = true;
-        Cursor.lockState = CursorLockMode.None;
-        Time.timeScale = 0f;
     }
 }

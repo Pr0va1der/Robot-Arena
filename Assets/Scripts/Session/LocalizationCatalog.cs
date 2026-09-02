@@ -13,7 +13,8 @@ namespace RobotArena.Session
                 { LocalizationKey.StartSession, "Начать сессию" },
                 { LocalizationKey.Controls, "Управление" },
                 { LocalizationKey.Settings, "Настройки" },
-                { LocalizationKey.Quit, "Выйти" },
+                { LocalizationKey.Authors, "Авторы" },
+                { LocalizationKey.AuthorsDetails, "Pr0va1der\nDinEv\nTAXOMETP" },
                 { LocalizationKey.Back, "Назад" },
                 { LocalizationKey.MenuHint, "Enter / Space — выбрать    Esc — назад" },
                 {
@@ -89,7 +90,8 @@ namespace RobotArena.Session
                 { LocalizationKey.StartSession, "Start session" },
                 { LocalizationKey.Controls, "Controls" },
                 { LocalizationKey.Settings, "Settings" },
-                { LocalizationKey.Quit, "Quit" },
+                { LocalizationKey.Authors, "Authors" },
+                { LocalizationKey.AuthorsDetails, "Pr0va1der\nDinEv\nTAXOMETP" },
                 { LocalizationKey.Back, "Back" },
                 { LocalizationKey.MenuHint, "Enter / Space — select    Esc — back" },
                 {

@@ -1,7 +1,6 @@
 using RobotArena.Session;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using ArenaPlayerSettings = RobotArena.Session.PlayerSettings;
@@ -21,6 +20,7 @@ public sealed class DesktopArenaUi : MonoBehaviour
 
     private GameObject desktopRoot;
     private GameObject gameplayPanel;
+    private GameObject pausePanel;
     private GameObject tutorialPanel;
     private GameObject resultPanel;
     private TextMeshProUGUI waveText;
@@ -83,21 +83,14 @@ public sealed class DesktopArenaUi : MonoBehaviour
         playerHealth = FindObjectOfType<PlayerHP>();
         playerShooting = FindObjectOfType<PlayerShooting>();
 
-        GameObject legacyPauseUi = pauseMenu.pauseMenuUI;
-        GameObject legacyGameplayUi = pauseMenu.ingameUI;
-        HideLegacyScreens(legacyPauseUi, legacyGameplayUi);
-
         CreateUi(canvas.transform);
-        pauseMenu.ConfigureUi(
-            FindChildPanel("PauseMenu").gameObject,
-            gameplayPanel);
         pauseMenu.SetResultMode(false);
-        pauseMenu.SetTutorialMode(true);
+        bool shouldShowTutorial = !settingsRuntime.Current.HasCompletedTutorial;
+        pauseMenu.SetTutorialMode(shouldShowTutorial);
         pauseMenu.RequirePointerLockClick();
-        pauseMenu.SetPauseSource(PauseSource.User, true);
 
-        tutorialVisible = true;
-        tutorialPanel.SetActive(true);
+        tutorialVisible = shouldShowTutorial;
+        tutorialPanel.SetActive(shouldShowTutorial);
         resultPanel.SetActive(false);
 
         if (sessionManager != null)
@@ -118,7 +111,8 @@ public sealed class DesktopArenaUi : MonoBehaviour
 
         RefreshLocalizedText();
         UpdateHud();
-        SelectButton(tutorialStartButton);
+        UpdatePresentation();
+        DesktopUiFactory.Select(shouldShowTutorial ? tutorialStartButton : null);
     }
 
     private void Update()
@@ -173,10 +167,12 @@ public sealed class DesktopArenaUi : MonoBehaviour
 
         tutorialVisible = false;
         tutorialPanel.SetActive(false);
+        settingsRuntime.MarkTutorialCompleted();
         pauseMenu.SetTutorialMode(false);
         pauseMenu.RequirePointerLockClick();
         pauseMenu.Resume();
-        SelectButton(null);
+        UpdatePresentation();
+        DesktopUiFactory.Select(null);
     }
 
     private void OnSessionStateChanged(SessionState state)
@@ -201,8 +197,9 @@ public sealed class DesktopArenaUi : MonoBehaviour
         pauseMenu.SetTutorialMode(false);
         pauseMenu.SetResultMode(true);
         RefreshResultText(state);
+        UpdatePresentation();
 
-        SelectButton(resultRetryButton);
+        DesktopUiFactory.Select(resultRetryButton);
     }
 
     private void RefreshResultText(SessionState state)
@@ -283,11 +280,36 @@ public sealed class DesktopArenaUi : MonoBehaviour
                     playerShooting.UltimateCooldownRemaining);
         }
 
-        bool showPointerPrompt = !tutorialVisible &&
-                                  !resultVisible &&
-                                  !pauseMenu.IsPaused &&
-                                  pauseMenu.RequiresPointerLockClick;
-        pointerPrompt.gameObject.SetActive(showPointerPrompt);
+        pointerPrompt.gameObject.SetActive(ShouldShowPointerPrompt());
+    }
+
+    private void UpdatePresentation()
+    {
+        if (gameplayPanel != null)
+        {
+            gameplayPanel.SetActive(!tutorialVisible && !resultVisible);
+        }
+
+        if (pausePanel != null)
+        {
+            pausePanel.SetActive(
+                !tutorialVisible &&
+                !resultVisible &&
+                pauseMenu.ActivePauseSources.HasFlag(PauseSource.User));
+        }
+
+        if (pointerPrompt != null)
+        {
+            pointerPrompt.gameObject.SetActive(ShouldShowPointerPrompt());
+        }
+    }
+
+    private bool ShouldShowPointerPrompt()
+    {
+        return !tutorialVisible &&
+               !resultVisible &&
+               !pauseMenu.IsPaused &&
+               pauseMenu.RequiresPointerLockClick;
     }
 
     private void OnHealthChanged(float current, float max)
@@ -295,14 +317,16 @@ public sealed class DesktopArenaUi : MonoBehaviour
         UpdateHud();
     }
 
-    private void OnPauseStateChanged(bool isPaused)
+    private void OnPauseStateChanged()
     {
-        if (isPaused &&
+        UpdatePresentation();
+
+        if (pauseMenu.IsPaused &&
             !tutorialVisible &&
             !resultVisible &&
             pauseMenu.ActivePauseSources.HasFlag(PauseSource.User))
         {
-            SelectButton(pauseResumeButton);
+            DesktopUiFactory.Select(pauseResumeButton);
         }
     }
 
@@ -387,7 +411,7 @@ public sealed class DesktopArenaUi : MonoBehaviour
             string.Empty,
             24f,
             AccentColor);
-        SetAnchor(pointerPrompt.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 76f), new Vector2(700f, 48f));
+        DesktopUiFactory.SetAnchor(pointerPrompt.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 76f), new Vector2(700f, 48f));
         pointerPrompt.gameObject.SetActive(false);
 
         CreatePausePanel(safeRoot);
@@ -398,16 +422,16 @@ public sealed class DesktopArenaUi : MonoBehaviour
     private void CreateHud(Transform parent)
     {
         waveText = DesktopUiFactory.CreateText("WaveText", parent, string.Empty, 30f, AccentColor, TextAlignmentOptions.Left);
-        SetAnchor(waveText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(32f, -26f), new Vector2(380f, 42f));
+        DesktopUiFactory.SetAnchor(waveText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(32f, -26f), new Vector2(380f, 42f));
 
         statusText = DesktopUiFactory.CreateText("StatusText", parent, string.Empty, 20f, Color.white, TextAlignmentOptions.Left);
-        SetAnchor(statusText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(32f, -70f), new Vector2(380f, 34f));
+        DesktopUiFactory.SetAnchor(statusText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(32f, -70f), new Vector2(380f, 34f));
 
         botText = DesktopUiFactory.CreateText("BotText", parent, string.Empty, 24f, Color.white, TextAlignmentOptions.Right);
-        SetAnchor(botText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-32f, -28f), new Vector2(380f, 42f));
+        DesktopUiFactory.SetAnchor(botText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-32f, -28f), new Vector2(380f, 42f));
 
         timerText = DesktopUiFactory.CreateText("TimerText", parent, string.Empty, 22f, Color.white);
-        SetAnchor(timerText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(460f, 42f));
+        DesktopUiFactory.SetAnchor(timerText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(460f, 42f));
 
         GameObject healthBar = DesktopUiFactory.CreatePanel(
             "HealthBar",
@@ -415,7 +439,7 @@ public sealed class DesktopArenaUi : MonoBehaviour
             new Color(0f, 0f, 0f, 0.55f),
             false);
         RectTransform healthBarRect = healthBar.GetComponent<RectTransform>();
-        SetAnchor(healthBarRect, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(32f, 32f), new Vector2(360f, 24f));
+        DesktopUiFactory.SetAnchor(healthBarRect, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(32f, 32f), new Vector2(360f, 24f));
 
         GameObject fill = DesktopUiFactory.CreatePanel(
             "Fill",
@@ -435,10 +459,10 @@ public sealed class DesktopArenaUi : MonoBehaviour
         DesktopUiFactory.Stretch(fill.GetComponent<RectTransform>());
 
         healthText = DesktopUiFactory.CreateText("HealthText", parent, string.Empty, 20f, Color.white, TextAlignmentOptions.Left);
-        SetAnchor(healthText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(32f, 58f), new Vector2(360f, 34f));
+        DesktopUiFactory.SetAnchor(healthText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(32f, 58f), new Vector2(360f, 34f));
 
         cooldownText = DesktopUiFactory.CreateText("CooldownText", parent, string.Empty, 20f, AccentColor, TextAlignmentOptions.Right);
-        SetAnchor(cooldownText.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-32f, 38f), new Vector2(360f, 34f));
+        DesktopUiFactory.SetAnchor(cooldownText.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-32f, 38f), new Vector2(360f, 34f));
 
         controlsHint = DesktopUiFactory.CreateText(
             "ControlsHint",
@@ -446,55 +470,55 @@ public sealed class DesktopArenaUi : MonoBehaviour
             string.Empty,
             16f,
             new Color(1f, 1f, 1f, 0.75f));
-        SetAnchor(controlsHint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 10f), new Vector2(1200f, 30f));
+        DesktopUiFactory.SetAnchor(controlsHint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 10f), new Vector2(1200f, 30f));
 
-        TextMeshProUGUI crosshair = DesktopUiFactory.CreateText("Crosshair", parent, "+", 30f, Color.white);
-        SetAnchor(crosshair.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(44f, 44f));
     }
 
     private void CreatePausePanel(Transform parent)
     {
-        GameObject panel = CreateOverlay("PauseMenu", parent);
-        GameObject card = CreateCard(panel.transform, "Card", new Vector2(560f, 390f));
-        pauseTitleText = CreateCardText(card.transform, "Title", string.Empty, 42f, new Vector2(0f, 118f), new Vector2(500f, 64f), AccentColor);
-        pauseDetailsText = CreateCardText(card.transform, "Details", string.Empty, 24f, new Vector2(0f, 54f), new Vector2(500f, 48f), Color.white);
+        pausePanel = DesktopUiFactory.CreateOverlay("PauseMenu", parent, OverlayColor);
+        GameObject panel = pausePanel;
+        GameObject card = DesktopUiFactory.CreateCard("Card", panel.transform, CardColor, new Vector2(560f, 390f));
+        pauseTitleText = DesktopUiFactory.CreatePositionedText("Title", card.transform, string.Empty, 42f, AccentColor, new Vector2(0f, 118f), new Vector2(500f, 64f));
+        pauseDetailsText = DesktopUiFactory.CreatePositionedText("Details", card.transform, string.Empty, 24f, Color.white, new Vector2(0f, 54f), new Vector2(500f, 48f));
         pauseResumeButton = DesktopUiFactory.CreateButton("ResumeButton", card.transform, string.Empty, new Vector2(420f, 64f), ButtonColor, pauseMenu.Resume);
-        SetCenter(pauseResumeButton.GetComponent<RectTransform>(), new Vector2(0f, -32f), new Vector2(420f, 64f));
+        DesktopUiFactory.BindPointerDown(pauseResumeButton, () => pauseMenu.ResumeFromPointerGesture());
+        DesktopUiFactory.SetCenter(pauseResumeButton.GetComponent<RectTransform>(), new Vector2(0f, -32f), new Vector2(420f, 64f));
         pauseMenuButton = DesktopUiFactory.CreateButton("MenuButton", card.transform, string.Empty, new Vector2(420f, 64f), ButtonColor, pauseMenu.ToTitleScreen);
-        SetCenter(pauseMenuButton.GetComponent<RectTransform>(), new Vector2(0f, -112f), new Vector2(420f, 64f));
-        ConfigureVerticalNavigation(pauseResumeButton, pauseMenuButton);
+        DesktopUiFactory.SetCenter(pauseMenuButton.GetComponent<RectTransform>(), new Vector2(0f, -112f), new Vector2(420f, 64f));
+        DesktopUiFactory.ConfigureVerticalNavigation(pauseResumeButton, pauseMenuButton);
         panel.SetActive(false);
     }
 
     private void CreateTutorialPanel(Transform parent)
     {
-        tutorialPanel = CreateOverlay("Tutorial", parent);
-        GameObject card = CreateCard(tutorialPanel.transform, "Card", new Vector2(760f, 560f));
-        tutorialTitleText = CreateCardText(card.transform, "Title", string.Empty, 42f, new Vector2(0f, 230f), new Vector2(700f, 64f), AccentColor);
-        tutorialDetailsText = CreateCardText(
-            card.transform,
+        tutorialPanel = DesktopUiFactory.CreateOverlay("Tutorial", parent, OverlayColor);
+        GameObject card = DesktopUiFactory.CreateCard("Card", tutorialPanel.transform, CardColor, new Vector2(760f, 560f));
+        tutorialTitleText = DesktopUiFactory.CreatePositionedText("Title", card.transform, string.Empty, 42f, AccentColor, new Vector2(0f, 230f), new Vector2(700f, 64f));
+        tutorialDetailsText = DesktopUiFactory.CreatePositionedText(
             "Details",
+            card.transform,
             string.Empty,
             25f,
+            Color.white,
             new Vector2(0f, 28f),
-            new Vector2(650f, 330f),
-            Color.white);
+            new Vector2(650f, 330f));
         tutorialStartButton = DesktopUiFactory.CreateButton("StartButton", card.transform, string.Empty, new Vector2(430f, 70f), ButtonColor, StartTutorial);
-        SetCenter(tutorialStartButton.GetComponent<RectTransform>(), new Vector2(0f, -225f), new Vector2(430f, 70f));
-        SetButtonNavigation(tutorialStartButton, null, null);
+        DesktopUiFactory.SetCenter(tutorialStartButton.GetComponent<RectTransform>(), new Vector2(0f, -225f), new Vector2(430f, 70f));
+        DesktopUiFactory.ConfigureVerticalNavigation(tutorialStartButton);
     }
 
     private void CreateResultPanel(Transform parent)
     {
-        resultPanel = CreateOverlay("Result", parent);
-        GameObject card = CreateCard(resultPanel.transform, "Card", new Vector2(700f, 540f));
-        resultTitleText = CreateCardText(card.transform, "Title", string.Empty, 42f, new Vector2(0f, 176f), new Vector2(640f, 64f), AccentColor);
-        resultDetailsText = CreateCardText(card.transform, "Details", string.Empty, 26f, new Vector2(0f, 55f), new Vector2(600f, 190f), Color.white);
+        resultPanel = DesktopUiFactory.CreateOverlay("Result", parent, OverlayColor);
+        GameObject card = DesktopUiFactory.CreateCard("Card", resultPanel.transform, CardColor, new Vector2(700f, 540f));
+        resultTitleText = DesktopUiFactory.CreatePositionedText("Title", card.transform, string.Empty, 42f, AccentColor, new Vector2(0f, 176f), new Vector2(640f, 64f));
+        resultDetailsText = DesktopUiFactory.CreatePositionedText("Details", card.transform, string.Empty, 26f, Color.white, new Vector2(0f, 55f), new Vector2(600f, 190f));
         resultRetryButton = DesktopUiFactory.CreateButton("RetryButton", card.transform, string.Empty, new Vector2(400f, 64f), ButtonColor, RestartSession);
-        SetCenter(resultRetryButton.GetComponent<RectTransform>(), new Vector2(0f, -112f), new Vector2(400f, 64f));
+        DesktopUiFactory.SetCenter(resultRetryButton.GetComponent<RectTransform>(), new Vector2(0f, -112f), new Vector2(400f, 64f));
         resultMenuButton = DesktopUiFactory.CreateButton("MenuButton", card.transform, string.Empty, new Vector2(400f, 64f), ButtonColor, pauseMenu.ToTitleScreen);
-        SetCenter(resultMenuButton.GetComponent<RectTransform>(), new Vector2(0f, -190f), new Vector2(400f, 64f));
-        ConfigureVerticalNavigation(resultRetryButton, resultMenuButton);
+        DesktopUiFactory.SetCenter(resultMenuButton.GetComponent<RectTransform>(), new Vector2(0f, -190f), new Vector2(400f, 64f));
+        DesktopUiFactory.ConfigureVerticalNavigation(resultRetryButton, resultMenuButton);
         resultPanel.SetActive(false);
     }
 
@@ -507,105 +531,4 @@ public sealed class DesktopArenaUi : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    private static GameObject CreateOverlay(string name, Transform parent)
-    {
-        GameObject panel = DesktopUiFactory.CreateFullScreenRoot(name, parent, false);
-        Image image = panel.GetComponent<Image>();
-        image.color = OverlayColor;
-        image.raycastTarget = true;
-        return panel;
-    }
-
-    private static GameObject CreateCard(Transform parent, string name, Vector2 size)
-    {
-        GameObject card = DesktopUiFactory.CreatePanel(name, parent, CardColor, true);
-        SetCenter(card.GetComponent<RectTransform>(), Vector2.zero, size);
-        return card;
-    }
-
-    private static TextMeshProUGUI CreateCardText(
-        Transform parent,
-        string name,
-        string value,
-        float fontSize,
-        Vector2 position,
-        Vector2 size,
-        Color color)
-    {
-        TextMeshProUGUI text = DesktopUiFactory.CreateText(name, parent, value, fontSize, color);
-        SetCenter(text.rectTransform, position, size);
-        return text;
-    }
-
-    private static void SetAnchor(
-        RectTransform rectTransform,
-        Vector2 anchor,
-        Vector2 pivot,
-        Vector2 position,
-        Vector2 size)
-    {
-        rectTransform.anchorMin = anchor;
-        rectTransform.anchorMax = anchor;
-        rectTransform.pivot = pivot;
-        rectTransform.anchoredPosition = position;
-        rectTransform.sizeDelta = size;
-    }
-
-    private static void SetCenter(RectTransform rectTransform, Vector2 position, Vector2 size)
-    {
-        DesktopUiFactory.SetCenter(rectTransform, position, size);
-    }
-
-    private static void SetButtonNavigation(Button button, Selectable up, Selectable down)
-    {
-        Navigation navigation = button.navigation;
-        navigation.mode = Navigation.Mode.Explicit;
-        navigation.selectOnUp = up;
-        navigation.selectOnDown = down;
-        button.navigation = navigation;
-    }
-
-    private static void ConfigureVerticalNavigation(Button first, Button second)
-    {
-        SetButtonNavigation(first, null, second);
-        SetButtonNavigation(second, first, null);
-    }
-
-    private static void SelectButton(Selectable selectable)
-    {
-        if (EventSystem.current != null)
-        {
-            EventSystem.current.SetSelectedGameObject(selectable == null ? null : selectable.gameObject);
-        }
-    }
-
-    private Transform FindChildPanel(string name)
-    {
-        return desktopRoot.transform.Find("SafeArea/" + name);
-    }
-
-    private void HideLegacyScreens(GameObject legacyPauseUi, GameObject legacyGameplayUi)
-    {
-        if (legacyPauseUi != null)
-        {
-            legacyPauseUi.SetActive(false);
-        }
-
-        if (legacyGameplayUi != null)
-        {
-            legacyGameplayUi.SetActive(false);
-        }
-
-        DeathScreen deathScreen = FindObjectOfType<DeathScreen>();
-        if (deathScreen != null && deathScreen.deathScreenUI != null)
-        {
-            deathScreen.deathScreenUI.SetActive(false);
-        }
-
-        WinScreen winScreen = FindObjectOfType<WinScreen>();
-        if (winScreen != null && winScreen.winScreenUI != null)
-        {
-            winScreen.winScreenUI.SetActive(false);
-        }
-    }
 }

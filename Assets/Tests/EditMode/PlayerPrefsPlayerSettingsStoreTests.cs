@@ -40,7 +40,8 @@ namespace RobotArena.Session.Tests
                 0.25f,
                 0.9f,
                 true,
-                GraphicsQualityProfile.Quality);
+                GraphicsQualityProfile.Quality,
+                true);
 
             store.Save(expected);
             var reloadedStore = new PlayerPrefsPlayerSettingsStore(TestKeyPrefix, GameLanguage.English);
@@ -69,12 +70,13 @@ namespace RobotArena.Session.Tests
             Assert.That(migrated.GraphicsProfile, Is.EqualTo(GraphicsQualityProfile.Performance));
             Assert.That(PlayerPrefs.GetInt(store.SchemaVersionKey), Is.EqualTo(PlayerPrefsPlayerSettingsStore.CurrentSchemaVersion));
             Assert.That(PlayerPrefs.HasKey(store.GraphicsProfileKey), Is.True);
+            Assert.That(migrated.HasCompletedTutorial, Is.False);
         }
 
         [Test]
         public void Missing_fields_are_migrated_without_discarding_existing_values()
         {
-            PlayerPrefs.SetInt(store.SchemaVersionKey, PlayerPrefsPlayerSettingsStore.CurrentSchemaVersion);
+            PlayerPrefs.SetInt(store.SchemaVersionKey, PlayerPrefsPlayerSettingsStore.CurrentSchemaVersion - 1);
             PlayerPrefs.SetInt(store.LanguageKey, (int)GameLanguage.Russian);
             PlayerPrefs.SetFloat(store.MasterVolumeKey, 0.5f);
             PlayerPrefs.Save();
@@ -87,8 +89,28 @@ namespace RobotArena.Session.Tests
             Assert.That(migrated.SfxVolume, Is.EqualTo(1f));
             Assert.That(migrated.IsMuted, Is.False);
             Assert.That(migrated.GraphicsProfile, Is.EqualTo(GraphicsQualityProfile.Performance));
+            Assert.That(migrated.HasCompletedTutorial, Is.False);
             Assert.That(PlayerPrefs.HasKey(store.MusicVolumeKey), Is.True);
             Assert.That(PlayerPrefs.HasKey(store.GraphicsProfileKey), Is.True);
+            Assert.That(PlayerPrefs.HasKey(store.TutorialCompletedKey), Is.True);
+        }
+
+        [Test]
+        public void Current_schema_round_trips_tutorial_completion_with_existing_settings()
+        {
+            PlayerSettings expected = new PlayerSettings(
+                GameLanguage.Russian,
+                0.7f,
+                0.6f,
+                0.5f,
+                false,
+                GraphicsQualityProfile.Quality,
+                true);
+
+            store.Save(expected);
+
+            Assert.That(store.Load(), Is.EqualTo(expected));
+            Assert.That(PlayerPrefs.GetInt(store.SchemaVersionKey), Is.EqualTo(PlayerPrefsPlayerSettingsStore.CurrentSchemaVersion));
         }
 
         [Test]
@@ -118,6 +140,7 @@ namespace RobotArena.Session.Tests
             PlayerPrefs.DeleteKey(store.SfxVolumeKey);
             PlayerPrefs.DeleteKey(store.MutedKey);
             PlayerPrefs.DeleteKey(store.GraphicsProfileKey);
+            PlayerPrefs.DeleteKey(store.TutorialCompletedKey);
             PlayerPrefs.Save();
         }
     }

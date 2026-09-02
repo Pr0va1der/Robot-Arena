@@ -46,6 +46,19 @@ public class LaserPointer : MonoBehaviour
         return true;
     }
 
+    public bool TryGetAimDirection(out Vector3 direction)
+    {
+        if (barrel == null)
+        {
+            direction = default;
+            return false;
+        }
+
+        RefreshAim();
+        direction = AimDirection;
+        return direction.sqrMagnitude > 0.0001f;
+    }
+
     public bool RefreshAim()
     {
         if (barrel == null)

@@ -24,5 +24,9 @@ public sealed class DesktopInput : IGameplayInputActions
     public bool SubmitPressed => Input.GetButtonDown(SubmitAction) ||
                                  Input.GetKeyDown(KeyCode.Return) ||
                                  Input.GetKeyDown(KeyCode.KeypadEnter);
+    public bool UserGesturePressed => Input.anyKeyDown ||
+                                      Input.GetMouseButtonDown(0) ||
+                                      Input.GetMouseButtonDown(1) ||
+                                      Input.GetMouseButtonDown(2);
     public bool PointerGesturePressed => Input.GetMouseButtonDown(0);
 }
