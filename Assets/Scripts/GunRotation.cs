@@ -32,12 +32,12 @@ public class GunRotation : MonoBehaviour
 
         // The camera's final view direction supplies pitch only; the weapon remains the line-of-fire authority.
         float elevation = PlayerWeaponAim.ClampElevation(
-            PlayerWeaponAim.VerticalViewAngle(cameraTransform.forward),
+            PlayerWeaponAim.CameraOrbitElevation(cameraTransform.forward),
             minElevation,
             maxElevation);
 
         Quaternion targetRotation = Quaternion.Euler(
-            -90f - elevation,
+            -90f + elevation,
             cameraTransform.eulerAngles.y,
             0f);
         transform.rotation = Quaternion.Lerp(

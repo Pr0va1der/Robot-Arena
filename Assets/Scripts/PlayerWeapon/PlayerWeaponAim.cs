@@ -4,7 +4,7 @@ namespace RobotArena.PlayerWeapon
 {
     public static class PlayerWeaponAim
     {
-        public static float VerticalViewAngle(Vector3 cameraForward)
+        public static float CameraOrbitElevation(Vector3 cameraForward)
         {
             if (cameraForward.sqrMagnitude < 0.0001f)
             {
