@@ -3,6 +3,7 @@ using RobotArena.PlayerWeapon;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+[DefaultExecutionOrder(200)]
 public class PlayerShooting : MonoBehaviour
 {
     private const string ShootStateName = "Shoot";
@@ -80,8 +81,11 @@ public class PlayerShooting : MonoBehaviour
         }
     }
 
-    private void Update()
+    private void LateUpdate()
     {
+        // CinemachineBrain updates the final camera in LateUpdate. Running this
+        // after GunRotation (100) and LaserPointer (110) keeps a shot on the
+        // current frame's central camera ray instead of the previous turret pose.
         if (PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed)
         {
             return;

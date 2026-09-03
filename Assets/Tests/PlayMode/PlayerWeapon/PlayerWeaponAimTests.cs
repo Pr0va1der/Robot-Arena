@@ -14,6 +14,13 @@ namespace RobotArena.PlayerWeapon.Tests
         private Scene previousActiveScene;
         private bool integrationSceneLoadedByTest;
 
+        [Test]
+        public void Shooting_runs_after_camera_and_laser_pose_updates()
+        {
+            Assert.That(GetExecutionOrder("GunRotation"), Is.LessThan(GetExecutionOrder("LaserPointer")));
+            Assert.That(GetExecutionOrder("LaserPointer"), Is.LessThan(GetExecutionOrder("PlayerShooting")));
+        }
+
         [UnityTest]
         public IEnumerator Weapon_and_laser_follow_camera_orbit_upward()
         {
@@ -78,26 +85,19 @@ namespace RobotArena.PlayerWeapon.Tests
         }
 
         [UnityTest]
-        public IEnumerator Weapon_converges_smoothly_to_the_camera_angle()
+        public IEnumerator Weapon_follows_camera_without_gameplay_lag()
         {
             using (AimFixture fixture = new AimFixture("SmoothAimCamera", "SmoothAimWeapon"))
             {
                 Quaternion expectedRotation = Quaternion.Euler(-70f, 35f, 0f);
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
 
-                float initialDistance = Quaternion.Angle(
-                    fixture.WeaponObject.transform.rotation,
-                    expectedRotation);
-
                 yield return null;
 
-                float firstFrameDistance = Quaternion.Angle(
-                    fixture.WeaponObject.transform.rotation,
-                    expectedRotation);
-                Assert.That(firstFrameDistance, Is.GreaterThan(1f));
-                Assert.That(firstFrameDistance, Is.LessThan(initialDistance));
-
-                yield return WaitForRotation(fixture.WeaponObject, expectedRotation);
+                AssertWeaponRotation(fixture.WeaponObject, expectedRotation);
+                yield return WaitForAimDirection(
+                    fixture.LaserPointer,
+                    expectedRotation * Vector3.up);
             }
         }
 
@@ -168,18 +168,53 @@ namespace RobotArena.PlayerWeapon.Tests
             Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
             Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
             Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
+            Type shoulderCameraRigType = PlayerWeaponTestReflection.FindRuntimeType("ShoulderCameraRig");
+            Type cameraColliderType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineCollider");
+            Type crosshairType = PlayerWeaponTestReflection.FindRuntimeType("DesktopCrosshair");
             Assert.That(gunRotationType, Is.Not.Null);
             Assert.That(laserPointerType, Is.Not.Null);
             Assert.That(freeLookType, Is.Not.Null);
+            Assert.That(shoulderCameraRigType, Is.Not.Null);
+            Assert.That(cameraColliderType, Is.Not.Null);
+            Assert.That(crosshairType, Is.Not.Null);
 
             Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
             Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
             Component freeLook = FindSceneComponent(integrationScene, freeLookType);
+            Component shoulderCameraRig = FindSceneComponent(integrationScene, shoulderCameraRigType);
+            Component cameraCollider = FindSceneComponent(integrationScene, cameraColliderType);
+            Component crosshair = FindSceneComponent(integrationScene, crosshairType);
             Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
             Assert.That(gunRotation, Is.Not.Null);
             Assert.That(laserPointer, Is.Not.Null);
             Assert.That(freeLook, Is.Not.Null);
+            Assert.That(shoulderCameraRig, Is.Not.Null);
+            Assert.That(cameraCollider, Is.Not.Null);
+            Assert.That(crosshair, Is.Not.Null);
             Assert.That(sceneCamera, Is.Not.Null);
+
+            yield return null;
+            PropertyInfo lookAtProperty = freeLookType.GetProperty(
+                "LookAt",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(lookAtProperty, Is.Not.Null);
+            Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
+            Assert.That(lookAt, Is.Not.Null);
+
+            RectTransform crosshairRect = crosshair.GetComponent<RectTransform>();
+            Assert.That(crosshairRect, Is.Not.Null);
+            Assert.That(crosshairRect.anchorMin.x, Is.EqualTo(sceneCamera.rect.center.x).Within(0.01f));
+            Assert.That(crosshairRect.anchorMin.y, Is.EqualTo(sceneCamera.rect.center.y).Within(0.01f));
+            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
+
+            Vector3 cameraToLookAt = (lookAt.position - sceneCamera.transform.position).normalized;
+            Assert.That(
+                Vector3.Dot(cameraToLookAt, sceneCamera.transform.right),
+                Is.LessThan(-0.02f),
+                "The look-at target should remain left of the camera in the right-shoulder composition.");
+
+            Assert.That(GetFloatField(shoulderCameraRig, "shoulderOffset"), Is.EqualTo(0.75f).Within(0.001f));
+            Assert.That(GetFloatField(shoulderCameraRig, "targetScreenX"), Is.EqualTo(0.375f).Within(0.001f));
 
             FieldInfo cameraTransformField = gunRotationType.GetField(
                 "cameraTransform",
@@ -191,6 +226,7 @@ namespace RobotArena.PlayerWeapon.Tests
 
             SetCinemachineYAxisValue(freeLook, 0.9f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
+            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
 
             Vector3 upperCameraDirection = sceneCamera.transform.forward;
             Vector3 upperAimDirection = GetAimDirection(laserPointer);
@@ -199,6 +235,7 @@ namespace RobotArena.PlayerWeapon.Tests
 
             SetCinemachineYAxisValue(freeLook, 0.1f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
+            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
 
             Vector3 lowerCameraDirection = sceneCamera.transform.forward;
             Vector3 lowerAimDirection = GetAimDirection(laserPointer);
@@ -244,7 +281,6 @@ namespace RobotArena.PlayerWeapon.Tests
 
             Component gunRotation = weaponObject.AddComponent(gunRotationType);
             PlayerWeaponTestReflection.SetField(gunRotation, "cameraTransform", cameraTransform);
-            PlayerWeaponTestReflection.SetField(gunRotation, "rotationSpeed", 10f);
             PlayerWeaponTestReflection.SetField(gunRotation, "minElevation", -45f);
             PlayerWeaponTestReflection.SetField(gunRotation, "maxElevation", 45f);
         }
@@ -342,6 +378,33 @@ namespace RobotArena.PlayerWeapon.Tests
             Assert.That(valueField, Is.Not.Null);
             valueField.SetValue(yAxis, value);
             yAxisField.SetValue(freeLook, yAxis);
+        }
+
+        private static float GetFloatField(Component component, string fieldName)
+        {
+            FieldInfo field = component.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            return (float)field.GetValue(component);
+        }
+
+        private static void AssertLookAtScreenX(Camera camera, Transform lookAt, float expected)
+        {
+            Vector3 viewportPoint = camera.WorldToViewportPoint(lookAt.position);
+            Assert.That(viewportPoint.z, Is.GreaterThan(0f));
+            Assert.That(viewportPoint.x, Is.EqualTo(expected).Within(0.03f));
+        }
+
+        private static int GetExecutionOrder(string typeName)
+        {
+            Type type = PlayerWeaponTestReflection.FindRuntimeType(typeName);
+            Assert.That(type, Is.Not.Null);
+            DefaultExecutionOrder order = (DefaultExecutionOrder)Attribute.GetCustomAttribute(
+                type,
+                typeof(DefaultExecutionOrder));
+            Assert.That(order, Is.Not.Null);
+            return order.order;
         }
 
         private static void AssertWeaponRotation(

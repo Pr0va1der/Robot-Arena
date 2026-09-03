@@ -5031,7 +5031,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 830364046}
   cameraTransform: {fileID: 419118570}
-  rotationSpeed: 10
   minElevation: -45
   maxElevation: 45
 --- !u!1001 &420564683
@@ -18245,6 +18244,7 @@ GameObject:
   - component: {fileID: 1349541135}
   - component: {fileID: 1349541136}
   - component: {fileID: 1349541137}
+  - component: {fileID: 1349541138}
   m_Layer: 0
   m_Name: FreeLook Camera
   m_TagString: Untagged
@@ -18394,7 +18394,7 @@ MonoBehaviour:
   m_TransparentLayers:
     serializedVersion: 2
     m_Bits: 0
-  m_MinimumDistanceFromTarget: 0.01
+  m_MinimumDistanceFromTarget: 0.6
   m_AvoidObstacles: 1
   m_DistanceLimit: 0
   m_MinimumOcclusionTime: 0
@@ -18405,6 +18405,21 @@ MonoBehaviour:
   m_Damping: 0.5
   m_DampingWhenOccluded: 0.3
   m_OptimalTargetDistance: 0
+--- !u!114 &1349541138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1349541134}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f8d6f2c7f68460e9df7a7e8f2a49b31, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  shoulderOffset: 0.75
+  targetScreenX: 0.375
+  minimumDistanceFromTarget: 0.6
 --- !u!4 &1350462373 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4665457337495089461, guid: 67be6e1e1c2d427459ec3df0e0ebb722, type: 3}
@@ -23872,15 +23887,15 @@ MonoBehaviour:
   m_LookaheadIgnoreY: 0
   m_HorizontalDamping: 0.5
   m_VerticalDamping: 0.5
-  m_ScreenX: 0.5
+  m_ScreenX: 0.375
   m_ScreenY: 0.5
   m_DeadZoneWidth: 0
   m_DeadZoneHeight: 0
-  m_SoftZoneWidth: 0.8
+  m_SoftZoneWidth: 0
   m_SoftZoneHeight: 0.8
   m_BiasX: 0
   m_BiasY: 0
-  m_CenterOnActivate: 1
+  m_CenterOnActivate: 0
 --- !u!1001 &1752920119
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -27772,15 +27787,15 @@ MonoBehaviour:
   m_LookaheadIgnoreY: 0
   m_HorizontalDamping: 0
   m_VerticalDamping: 0
-  m_ScreenX: 0.5
+  m_ScreenX: 0.375
   m_ScreenY: 0.6
   m_DeadZoneWidth: 0
   m_DeadZoneHeight: 0
-  m_SoftZoneWidth: 0.8
+  m_SoftZoneWidth: 0
   m_SoftZoneHeight: 0.8
   m_BiasX: 0
   m_BiasY: 0
-  m_CenterOnActivate: 1
+  m_CenterOnActivate: 0
 --- !u!114 &1943161974
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -30358,7 +30373,7 @@ MonoBehaviour:
   m_LookaheadIgnoreY: 0
   m_HorizontalDamping: 0.5
   m_VerticalDamping: 0.5
-  m_ScreenX: 0.5
+  m_ScreenX: 0.375
   m_ScreenY: 0.5
   m_DeadZoneWidth: 0
   m_DeadZoneHeight: 0
@@ -30366,7 +30381,7 @@ MonoBehaviour:
   m_SoftZoneHeight: 0
   m_BiasX: 0
   m_BiasY: 0
-  m_CenterOnActivate: 1
+  m_CenterOnActivate: 0
 --- !u!1001 &1005310172966304879
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -6,7 +6,6 @@ public class GunRotation : MonoBehaviour
 {
     public Transform target;
     public Transform cameraTransform;
-    public float rotationSpeed = 10f;
     public float minElevation = -45f;
     public float maxElevation = 45f;
 
@@ -30,7 +29,7 @@ public class GunRotation : MonoBehaviour
             return;
         }
 
-        // The camera's final view direction supplies pitch only; the weapon remains the line-of-fire authority.
+        // The final camera orientation is the aiming authority. The turret must not lag the crosshair.
         float elevation = PlayerWeaponAim.ClampElevation(
             PlayerWeaponAim.CameraOrbitElevation(cameraTransform.forward),
             minElevation,
@@ -40,9 +39,6 @@ public class GunRotation : MonoBehaviour
             -90f + elevation,
             cameraTransform.eulerAngles.y,
             0f);
-        transform.rotation = Quaternion.Lerp(
-            transform.rotation,
-            targetRotation,
-            Time.deltaTime * rotationSpeed);
+        transform.rotation = targetRotation;
     }
 }
