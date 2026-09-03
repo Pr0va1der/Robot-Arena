@@ -142,28 +142,7 @@ namespace RobotArena.PlayerWeapon.Tests
         [UnityTest]
         public IEnumerator SampleScene_Cinemachine_final_camera_drives_the_weapon_and_laser()
         {
-            previousActiveScene = SceneManager.GetActiveScene();
-            integrationScene = SceneManager.GetSceneByName("SampleScene");
-
-            if (!integrationScene.IsValid() || !integrationScene.isLoaded)
-            {
-                AsyncOperation loadOperation = SceneManager.LoadSceneAsync(
-                    "SampleScene",
-                    LoadSceneMode.Additive);
-                Assert.That(loadOperation, Is.Not.Null);
-
-                while (!loadOperation.isDone)
-                {
-                    yield return null;
-                }
-
-                integrationScene = SceneManager.GetSceneByName("SampleScene");
-                integrationSceneLoadedByTest = true;
-            }
-
-            Assert.That(integrationScene.IsValid() && integrationScene.isLoaded, Is.True);
-            SceneManager.SetActiveScene(integrationScene);
-            yield return null;
+            yield return LoadIntegrationScene();
 
             Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
             Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
@@ -241,6 +220,174 @@ namespace RobotArena.PlayerWeapon.Tests
             Vector3 lowerAimDirection = GetAimDirection(laserPointer);
             Assert.That(lowerCameraDirection.y, Is.GreaterThan(upperCameraDirection.y));
             Assert.That(lowerAimDirection.y, Is.LessThan(upperAimDirection.y));
+        }
+
+        [UnityTest]
+        public IEnumerator SampleScene_camera_support_point_does_not_follow_turret_rotation()
+        {
+            yield return LoadIntegrationScene();
+
+            Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
+            Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
+            Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
+            Assert.That(freeLookType, Is.Not.Null);
+            Assert.That(gunRotationType, Is.Not.Null);
+            Assert.That(laserPointerType, Is.Not.Null);
+
+            Component freeLook = FindSceneComponent(integrationScene, freeLookType);
+            Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
+            Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
+            Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
+            Assert.That(freeLook, Is.Not.Null);
+            Assert.That(gunRotation, Is.Not.Null);
+            Assert.That(laserPointer, Is.Not.Null);
+            Assert.That(sceneCamera, Is.Not.Null);
+
+            PropertyInfo lookAtProperty = freeLookType.GetProperty(
+                "LookAt",
+                BindingFlags.Instance | BindingFlags.Public);
+            PropertyInfo followProperty = freeLookType.GetProperty(
+                "Follow",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(lookAtProperty, Is.Not.Null);
+            Assert.That(followProperty, Is.Not.Null);
+            Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
+            Assert.That(lookAt, Is.Not.Null);
+            Assert.That(
+                lookAt.parent,
+                Is.Null,
+                "The camera support point must not inherit the turret hierarchy.");
+            Assert.That(
+                Quaternion.Angle(lookAt.rotation, Quaternion.identity),
+                Is.LessThan(0.001f),
+                "The camera support point must keep a neutral world rotation.");
+            Assert.That(
+                followProperty.GetValue(freeLook, null),
+                Is.SameAs(lookAt),
+                "The FreeLook body and aim must both use the camera support point.");
+
+            FieldInfo targetField = gunRotationType.GetField(
+                "target",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(targetField, Is.Not.Null);
+            Transform chassis = targetField.GetValue(gunRotation) as Transform;
+            Assert.That(chassis, Is.Not.Null);
+
+            Rigidbody chassisBody = chassis.GetComponent<Rigidbody>();
+            Assert.That(chassisBody, Is.Not.Null);
+
+            Vector3 initialOffset = lookAt.position - chassis.position;
+            Vector3 originalChassisPosition = chassis.position;
+            Quaternion originalChassisRotation = chassis.rotation;
+            Quaternion originalTurretRotation = gunRotation.transform.rotation;
+            bool originalIsKinematic = chassisBody.isKinematic;
+            RigidbodyInterpolation originalInterpolation = chassisBody.interpolation;
+            Vector3 originalVelocity = chassisBody.velocity;
+            Vector3 originalAngularVelocity = chassisBody.angularVelocity;
+            string originalXAxisInput = GetCinemachineAxisInput(freeLook, "m_XAxis");
+            string originalYAxisInput = GetCinemachineAxisInput(freeLook, "m_YAxis");
+
+            try
+            {
+                SetCinemachineAxisInput(freeLook, "m_XAxis", string.Empty);
+                SetCinemachineAxisInput(freeLook, "m_YAxis", string.Empty);
+
+                chassisBody.rotation = originalChassisRotation * Quaternion.Euler(0f, 45f, 0f);
+                gunRotation.transform.rotation = originalTurretRotation * Quaternion.Euler(0f, 90f, 0f);
+                Assert.That(
+                    Vector3.Distance(lookAt.position - chassis.position, initialOffset),
+                    Is.LessThan(0.001f),
+                    "Rotating the turret must not move the camera's support point.");
+                Assert.That(
+                    Quaternion.Angle(lookAt.rotation, Quaternion.identity),
+                    Is.LessThan(0.001f),
+                    "Rotating the chassis or turret must not rotate the camera support point.");
+
+                chassisBody.rotation = originalChassisRotation;
+                gunRotation.transform.rotation = originalTurretRotation;
+                chassisBody.isKinematic = true;
+                chassisBody.interpolation = RigidbodyInterpolation.Interpolate;
+                yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
+
+                Vector3 previousCameraForward = sceneCamera.transform.forward;
+                bool chassisMoved = false;
+
+                for (int frame = 0; frame < 8; frame++)
+                {
+                    Vector3 nextPosition = chassisBody.position + new Vector3(0.08f, 0f, -0.04f);
+                    chassisBody.MovePosition(nextPosition);
+                    yield return new WaitForFixedUpdate();
+                    yield return null;
+
+                    chassisMoved |= Vector3.Distance(chassis.position, originalChassisPosition) > 0.01f;
+
+                    Assert.That(
+                        Vector3.Distance(lookAt.position - chassis.position, initialOffset),
+                        Is.LessThan(0.001f),
+                        "The camera support point must keep a stable chassis-relative offset over consecutive frames.");
+                    Assert.That(
+                        Quaternion.Angle(lookAt.rotation, Quaternion.identity),
+                        Is.LessThan(0.001f),
+                        "The camera support point must not inherit chassis or weapon rotation during movement.");
+                    Assert.That(
+                        Vector3.Distance(gunRotation.transform.position, chassis.position),
+                        Is.LessThan(0.001f),
+                        "The turret must remain attached to the moving chassis while following the camera.");
+                    Assert.That(
+                        Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                        Is.LessThan(1f),
+                        "The turret and fire line must follow the final camera direction on every rendered frame.");
+                    Assert.That(
+                        Vector3.Angle(previousCameraForward, sceneCamera.transform.forward),
+                        Is.LessThan(5f),
+                        "A fixed camera input must not produce a frame-sized direction jump during chassis motion.");
+
+                    previousCameraForward = sceneCamera.transform.forward;
+                }
+
+                Assert.That(
+                    chassisMoved,
+                    Is.True,
+                    "The regression must observe actual Rigidbody movement across rendered frames.");
+            }
+            finally
+            {
+                SetCinemachineAxisInput(freeLook, "m_XAxis", originalXAxisInput);
+                SetCinemachineAxisInput(freeLook, "m_YAxis", originalYAxisInput);
+                chassisBody.isKinematic = originalIsKinematic;
+                chassisBody.interpolation = originalInterpolation;
+                chassisBody.position = originalChassisPosition;
+                chassisBody.rotation = originalChassisRotation;
+                chassisBody.velocity = originalVelocity;
+                chassisBody.angularVelocity = originalAngularVelocity;
+                gunRotation.transform.rotation = originalTurretRotation;
+            }
+        }
+
+        private IEnumerator LoadIntegrationScene()
+        {
+            previousActiveScene = SceneManager.GetActiveScene();
+            integrationScene = SceneManager.GetSceneByName("SampleScene");
+
+            if (!integrationScene.IsValid() || !integrationScene.isLoaded)
+            {
+                AsyncOperation loadOperation = SceneManager.LoadSceneAsync(
+                    "SampleScene",
+                    LoadSceneMode.Additive);
+                Assert.That(loadOperation, Is.Not.Null);
+
+                while (!loadOperation.isDone)
+                {
+                    yield return null;
+                }
+
+                integrationScene = SceneManager.GetSceneByName("SampleScene");
+                integrationSceneLoadedByTest = true;
+            }
+
+            Assert.That(integrationScene.IsValid() && integrationScene.isLoaded, Is.True);
+            SceneManager.SetActiveScene(integrationScene);
+            yield return null;
         }
 
         [UnityTearDown]
@@ -366,18 +513,57 @@ namespace RobotArena.PlayerWeapon.Tests
 
         private static void SetCinemachineYAxisValue(Component freeLook, float value)
         {
-            FieldInfo yAxisField = freeLook.GetType().GetField(
-                "m_YAxis",
-                BindingFlags.Instance | BindingFlags.Public);
-            Assert.That(yAxisField, Is.Not.Null);
+            SetCinemachineAxisValue(freeLook, "m_YAxis", value);
+        }
 
-            object yAxis = yAxisField.GetValue(freeLook);
-            FieldInfo valueField = yAxis.GetType().GetField(
+        private static void SetCinemachineAxisValue(Component freeLook, string axisName, float value)
+        {
+            FieldInfo axisField = freeLook.GetType().GetField(
+                axisName,
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(axisField, Is.Not.Null);
+
+            object axis = axisField.GetValue(freeLook);
+            FieldInfo valueField = axis.GetType().GetField(
                 "Value",
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(valueField, Is.Not.Null);
-            valueField.SetValue(yAxis, value);
-            yAxisField.SetValue(freeLook, yAxis);
+            valueField.SetValue(axis, value);
+            axisField.SetValue(freeLook, axis);
+        }
+
+        private static string GetCinemachineAxisInput(Component freeLook, string axisName)
+        {
+            FieldInfo axisField = freeLook.GetType().GetField(
+                axisName,
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(axisField, Is.Not.Null);
+
+            object axis = axisField.GetValue(freeLook);
+            FieldInfo inputField = axis.GetType().GetField(
+                "m_InputAxisName",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(inputField, Is.Not.Null);
+            return (string)inputField.GetValue(axis);
+        }
+
+        private static void SetCinemachineAxisInput(
+            Component freeLook,
+            string axisName,
+            string inputAxisName)
+        {
+            FieldInfo axisField = freeLook.GetType().GetField(
+                axisName,
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(axisField, Is.Not.Null);
+
+            object axis = axisField.GetValue(freeLook);
+            FieldInfo inputField = axis.GetType().GetField(
+                "m_InputAxisName",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(inputField, Is.Not.Null);
+            inputField.SetValue(axis, inputAxisName);
+            axisField.SetValue(freeLook, axis);
         }
 
         private static float GetFloatField(Component component, string fieldName)

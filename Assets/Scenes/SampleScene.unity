@@ -8287,8 +8287,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 690579011}
+  - component: {fileID: 690579012}
   m_Layer: 3
-  m_Name: camera_to_target
+  m_Name: camera_support_point
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8309,6 +8310,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 419799334}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &690579012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 690579010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2b2a4c8900f4c18a63b7c8f2d1e9f40, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  followTarget: {fileID: 830364046}
 --- !u!1 &692851527 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: a1f81242deb85614f96e7e206ba679ae, type: 3}
@@ -18289,7 +18303,7 @@ MonoBehaviour:
   m_Priority: 10
   m_StandbyUpdate: 2
   m_LookAt: {fileID: 690579011}
-  m_Follow: {fileID: 830364046}
+  m_Follow: {fileID: 690579011}
   m_CommonLens: 1
   m_Lens:
     FieldOfView: 40
