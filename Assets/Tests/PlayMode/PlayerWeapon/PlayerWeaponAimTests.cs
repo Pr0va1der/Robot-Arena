@@ -28,8 +28,19 @@ namespace RobotArena.PlayerWeapon.Tests
             Quaternion turretRotation = PlayerWeaponAim.TurretRotation(cameraForward, -45f, 45f);
 
             Assert.That(
-                Vector3.Angle(turretRotation * Vector3.up, -cameraForward),
+                Vector3.Angle(turretRotation * Vector3.up, cameraForward),
                 Is.LessThan(0.01f));
+        }
+
+        [UnityTest]
+        public IEnumerator SampleScene_does_not_create_a_screen_crosshair()
+        {
+            yield return LoadIntegrationScene();
+
+            Assert.That(
+                FindSceneObject(integrationScene, "Crosshair"),
+                Is.Null,
+                "The game intentionally uses the laser line instead of a screen-space crosshair.");
         }
 
         [UnityTest]
@@ -41,10 +52,10 @@ namespace RobotArena.PlayerWeapon.Tests
 
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(-70f, 35f, 0f));
+                    Quaternion.Euler(110f, 35f, 0f));
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
-                    Quaternion.Euler(-70f, 35f, 0f) * Vector3.up);
+                    Quaternion.Euler(110f, 35f, 0f) * Vector3.up);
 
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.25f));
             }
@@ -59,10 +70,10 @@ namespace RobotArena.PlayerWeapon.Tests
 
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(-110f, 35f, 0f));
+                    Quaternion.Euler(70f, 35f, 0f));
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
-                    Quaternion.Euler(-110f, 35f, 0f) * Vector3.up);
+                    Quaternion.Euler(70f, 35f, 0f) * Vector3.up);
 
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.25f));
             }
@@ -74,22 +85,22 @@ namespace RobotArena.PlayerWeapon.Tests
             using (AimFixture fixture = new AimFixture("LimitAimCamera", "LimitAimWeapon"))
             {
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(70f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-45f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(135f, 0f, 0f));
                 yield return null;
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.65f));
 
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-70f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(110f, 0f, 0f));
                 yield return null;
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.25f));
 
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(-70f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-135f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(45f, 0f, 0f));
                 yield return null;
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.65f));
 
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(-20f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(70f, 0f, 0f));
                 yield return null;
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.25f));
             }
@@ -100,7 +111,7 @@ namespace RobotArena.PlayerWeapon.Tests
         {
             using (AimFixture fixture = new AimFixture("SmoothAimCamera", "SmoothAimWeapon"))
             {
-                Quaternion expectedRotation = Quaternion.Euler(-70f, 35f, 0f);
+                Quaternion expectedRotation = Quaternion.Euler(110f, 35f, 0f);
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
 
                 yield return null;
@@ -120,7 +131,7 @@ namespace RobotArena.PlayerWeapon.Tests
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(-70f, 0f, 0f));
+                    Quaternion.Euler(110f, 0f, 0f));
                 yield return null;
                 Vector3 settledAimDirection = GetAimDirection(fixture.LaserPointer);
 
@@ -141,10 +152,10 @@ namespace RobotArena.PlayerWeapon.Tests
 
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(-90f, 0f, 0f));
+                    Quaternion.Euler(90f, 0f, 0f));
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
-                    Vector3.back);
+                    Vector3.forward);
 
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.EqualTo(0f).Within(0.01f));
             }
@@ -160,27 +171,23 @@ namespace RobotArena.PlayerWeapon.Tests
             Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
             Type shoulderCameraRigType = PlayerWeaponTestReflection.FindRuntimeType("ShoulderCameraRig");
             Type cameraColliderType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineCollider");
-            Type crosshairType = PlayerWeaponTestReflection.FindRuntimeType("DesktopCrosshair");
             Assert.That(gunRotationType, Is.Not.Null);
             Assert.That(laserPointerType, Is.Not.Null);
             Assert.That(freeLookType, Is.Not.Null);
             Assert.That(shoulderCameraRigType, Is.Not.Null);
             Assert.That(cameraColliderType, Is.Not.Null);
-            Assert.That(crosshairType, Is.Not.Null);
 
             Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
             Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
             Component freeLook = FindSceneComponent(integrationScene, freeLookType);
             Component shoulderCameraRig = FindSceneComponent(integrationScene, shoulderCameraRigType);
             Component cameraCollider = FindSceneComponent(integrationScene, cameraColliderType);
-            Component crosshair = FindSceneComponent(integrationScene, crosshairType);
             Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
             Assert.That(gunRotation, Is.Not.Null);
             Assert.That(laserPointer, Is.Not.Null);
             Assert.That(freeLook, Is.Not.Null);
             Assert.That(shoulderCameraRig, Is.Not.Null);
             Assert.That(cameraCollider, Is.Not.Null);
-            Assert.That(crosshair, Is.Not.Null);
             Assert.That(sceneCamera, Is.Not.Null);
 
             yield return null;
@@ -191,10 +198,6 @@ namespace RobotArena.PlayerWeapon.Tests
             Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
             Assert.That(lookAt, Is.Not.Null);
 
-            RectTransform crosshairRect = crosshair.GetComponent<RectTransform>();
-            Assert.That(crosshairRect, Is.Not.Null);
-            Assert.That(crosshairRect.anchorMin.x, Is.EqualTo(sceneCamera.rect.center.x).Within(0.01f));
-            Assert.That(crosshairRect.anchorMin.y, Is.EqualTo(sceneCamera.rect.center.y).Within(0.01f));
             AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
 
             Vector3 cameraToLookAt = (lookAt.position - sceneCamera.transform.position).normalized;
@@ -345,7 +348,7 @@ namespace RobotArena.PlayerWeapon.Tests
                         Is.LessThan(0.001f),
                         "The turret must remain attached to the moving chassis while following the camera.");
                     Assert.That(
-                        Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                        Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The turret and fire line must follow the final camera direction on every rendered frame.");
                     Assert.That(
@@ -383,25 +386,24 @@ namespace RobotArena.PlayerWeapon.Tests
             Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
             Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
             Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
-            Type crosshairType = PlayerWeaponTestReflection.FindRuntimeType("DesktopCrosshair");
             Assert.That(freeLookType, Is.Not.Null);
             Assert.That(gunRotationType, Is.Not.Null);
             Assert.That(laserPointerType, Is.Not.Null);
-            Assert.That(crosshairType, Is.Not.Null);
 
             Component freeLook = FindSceneComponent(integrationScene, freeLookType);
             Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
             Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
-            Component crosshair = FindSceneComponent(integrationScene, crosshairType);
             Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
             Assert.That(freeLook, Is.Not.Null);
             Assert.That(gunRotation, Is.Not.Null);
             Assert.That(laserPointer, Is.Not.Null);
-            Assert.That(crosshair, Is.Not.Null);
             Assert.That(sceneCamera, Is.Not.Null);
 
-            RectTransform crosshairRect = crosshair.GetComponent<RectTransform>();
-            Assert.That(crosshairRect, Is.Not.Null);
+            Type inputProviderType = PlayerWeaponTestReflection.FindRuntimeType("DesktopCinemachineInput");
+            Component inputProvider = inputProviderType == null
+                ? null
+                : FindSceneComponent(integrationScene, inputProviderType);
+            Behaviour inputProviderBehaviour = inputProvider as Behaviour;
 
             PropertyInfo lookAtProperty = freeLookType.GetProperty(
                 "LookAt",
@@ -430,10 +432,16 @@ namespace RobotArena.PlayerWeapon.Tests
             Quaternion originalRotation = chassisBody.rotation;
             Vector3 originalVelocity = chassisBody.velocity;
             Vector3 originalAngularVelocity = chassisBody.angularVelocity;
+            bool originalInputProviderEnabled = inputProviderBehaviour != null && inputProviderBehaviour.enabled;
             GameObject obstacle = null;
 
             try
             {
+                if (inputProviderBehaviour != null)
+                {
+                    inputProviderBehaviour.enabled = false;
+                }
+
                 SetCinemachineAxisInput(freeLook, "m_XAxis", string.Empty);
                 SetCinemachineAxisInput(freeLook, "m_YAxis", string.Empty);
                 chassisBody.isKinematic = true;
@@ -453,20 +461,18 @@ namespace RobotArena.PlayerWeapon.Tests
                     yield return null;
 
                     Assert.That(
-                        Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                        Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The line of fire must follow the final camera orientation while movement and orbit input occur together.");
                     Assert.That(
-                        Vector3.Angle(gunRotation.transform.up, -sceneCamera.transform.forward),
+                        Vector3.Angle(gunRotation.transform.up, sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The player turret must consume the current frame's final camera orientation.");
-                    Assert.That(
-                        crosshairRect.anchorMin.x,
-                        Is.EqualTo(sceneCamera.rect.center.x).Within(0.01f));
-                    Assert.That(
-                        crosshairRect.anchorMin.y,
-                        Is.EqualTo(sceneCamera.rect.center.y).Within(0.01f));
                 }
+
+                // Let the final orbit values reach the rendered camera before placing
+                // the collision probe at the unobstructed position.
+                yield return null;
 
                 Vector3 unobstructedCameraPosition = sceneCamera.transform.position;
                 Vector3 cameraOrbitOffset = unobstructedCameraPosition - lookAt.position;
@@ -477,10 +483,12 @@ namespace RobotArena.PlayerWeapon.Tests
                 obstacle.transform.position = unobstructedCameraPosition - cameraOrbitOffset.normalized * 0.3f;
                 obstacle.transform.rotation = Quaternion.LookRotation(cameraOrbitOffset.normalized);
                 obstacle.transform.localScale = new Vector3(3f, 3f, 0.25f);
+                Physics.SyncTransforms();
 
                 Vector3 previousCollisionForward = sceneCamera.transform.forward;
                 for (int frame = 0; frame < 4; frame++)
                 {
+                    yield return new WaitForFixedUpdate();
                     yield return null;
 
                     Assert.That(
@@ -488,11 +496,11 @@ namespace RobotArena.PlayerWeapon.Tests
                         Is.LessThan(5f),
                         "A stationary collision correction must not introduce a frame-sized camera oscillation.");
                     Assert.That(
-                        Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                        Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The line of fire must follow the collision-corrected final camera orientation.");
                     Assert.That(
-                        Vector3.Angle(gunRotation.transform.up, -sceneCamera.transform.forward),
+                        Vector3.Angle(gunRotation.transform.up, sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The player turret must follow the collision-corrected final camera orientation without a frame of lag.");
 
@@ -521,6 +529,10 @@ namespace RobotArena.PlayerWeapon.Tests
                 chassisBody.rotation = originalRotation;
                 chassisBody.velocity = originalVelocity;
                 chassisBody.angularVelocity = originalAngularVelocity;
+                if (inputProviderBehaviour != null)
+                {
+                    inputProviderBehaviour.enabled = originalInputProviderEnabled;
+                }
             }
         }
 
@@ -928,7 +940,7 @@ namespace RobotArena.PlayerWeapon.Tests
                 Is.LessThan(0.001f),
                 message + " The turret must remain attached to the chassis.");
             Assert.That(
-                Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
                 Is.LessThan(1f),
                 message + " The line of fire must follow the final camera direction.");
         }
@@ -957,6 +969,24 @@ namespace RobotArena.PlayerWeapon.Tests
             Assert.That(integrationScene.IsValid() && integrationScene.isLoaded, Is.True);
             SceneManager.SetActiveScene(integrationScene);
             yield return null;
+
+            Type pauseMenuType = PlayerWeaponTestReflection.FindRuntimeType("PauseMenu");
+            Component pauseMenu = pauseMenuType == null
+                ? null
+                : FindSceneComponent(integrationScene, pauseMenuType);
+            if (pauseMenu != null)
+            {
+                pauseMenuType.GetMethod("SetTutorialMode").Invoke(pauseMenu, new object[] { false });
+                pauseMenuType.GetMethod("Resume").Invoke(pauseMenu, null);
+                MethodInfo setPauseSource = pauseMenuType.GetMethod("SetPauseSource");
+                Type pauseSourceType = PlayerWeaponTestReflection.FindRuntimeType("RobotArena.Session.PauseSource");
+                foreach (string sourceName in new[] { "User", "Focus", "Platform", "Advertisement", "Result", "Tutorial" })
+                {
+                    object source = Enum.Parse(pauseSourceType, sourceName);
+                    setPauseSource.Invoke(pauseMenu, new object[] { source, false });
+                }
+                pauseMenuType.GetMethod("ResumeFromPointerGesture").Invoke(pauseMenu, null);
+            }
         }
 
         [UnityTearDown]
@@ -1053,7 +1083,7 @@ namespace RobotArena.PlayerWeapon.Tests
             {
                 Vector3 aimDirection = GetAimDirection(laserPointer);
                 if (aimDirection.sqrMagnitude > 0.0001f &&
-                    Vector3.Angle(aimDirection, -sceneCamera.transform.forward) < tolerance)
+                    Vector3.Angle(aimDirection, sceneCamera.transform.forward) < tolerance)
                 {
                     break;
                 }
@@ -1062,7 +1092,7 @@ namespace RobotArena.PlayerWeapon.Tests
             }
 
             Assert.That(
-                Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
                 Is.LessThan(tolerance));
         }
 
@@ -1074,6 +1104,22 @@ namespace RobotArena.PlayerWeapon.Tests
                 if (components.Length > 0)
                 {
                     return components[0];
+                }
+            }
+
+            return null;
+        }
+
+        private static GameObject FindSceneObject(Scene scene, string objectName)
+        {
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (Transform transform in root.GetComponentsInChildren<Transform>(true))
+                {
+                    if (transform.name == objectName)
+                    {
+                        return transform.gameObject;
+                    }
                 }
             }
 
