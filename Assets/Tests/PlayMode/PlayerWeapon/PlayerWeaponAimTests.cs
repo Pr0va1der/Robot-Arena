@@ -21,6 +21,17 @@ namespace RobotArena.PlayerWeapon.Tests
             Assert.That(GetExecutionOrder("LaserPointer"), Is.LessThan(GetExecutionOrder("PlayerShooting")));
         }
 
+        [Test]
+        public void Turret_rotation_uses_the_camera_forward_heading()
+        {
+            Vector3 cameraForward = (Quaternion.Euler(18f, 127f, 23f) * Vector3.forward).normalized;
+            Quaternion turretRotation = PlayerWeaponAim.TurretRotation(cameraForward, -45f, 45f);
+
+            Assert.That(
+                Vector3.Angle(turretRotation * Vector3.up, -cameraForward),
+                Is.LessThan(0.01f));
+        }
+
         [UnityTest]
         public IEnumerator Weapon_and_laser_follow_camera_orbit_upward()
         {
@@ -364,6 +375,155 @@ namespace RobotArena.PlayerWeapon.Tests
             }
         }
 
+        [UnityTest]
+        public IEnumerator SampleScene_final_camera_keeps_weapon_aligned_during_motion_and_collision()
+        {
+            yield return LoadIntegrationScene();
+
+            Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
+            Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
+            Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
+            Type crosshairType = PlayerWeaponTestReflection.FindRuntimeType("DesktopCrosshair");
+            Assert.That(freeLookType, Is.Not.Null);
+            Assert.That(gunRotationType, Is.Not.Null);
+            Assert.That(laserPointerType, Is.Not.Null);
+            Assert.That(crosshairType, Is.Not.Null);
+
+            Component freeLook = FindSceneComponent(integrationScene, freeLookType);
+            Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
+            Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
+            Component crosshair = FindSceneComponent(integrationScene, crosshairType);
+            Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
+            Assert.That(freeLook, Is.Not.Null);
+            Assert.That(gunRotation, Is.Not.Null);
+            Assert.That(laserPointer, Is.Not.Null);
+            Assert.That(crosshair, Is.Not.Null);
+            Assert.That(sceneCamera, Is.Not.Null);
+
+            RectTransform crosshairRect = crosshair.GetComponent<RectTransform>();
+            Assert.That(crosshairRect, Is.Not.Null);
+
+            PropertyInfo lookAtProperty = freeLookType.GetProperty(
+                "LookAt",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(lookAtProperty, Is.Not.Null);
+            Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
+            Assert.That(lookAt, Is.Not.Null);
+
+            FieldInfo targetField = gunRotationType.GetField(
+                "target",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(targetField, Is.Not.Null);
+            Transform chassis = targetField.GetValue(gunRotation) as Transform;
+            Assert.That(chassis, Is.Not.Null);
+
+            Rigidbody chassisBody = chassis.GetComponent<Rigidbody>();
+            Assert.That(chassisBody, Is.Not.Null);
+
+            float originalXAxis = GetCinemachineAxisValue(freeLook, "m_XAxis");
+            float originalYAxis = GetCinemachineAxisValue(freeLook, "m_YAxis");
+            string originalXAxisInput = GetCinemachineAxisInput(freeLook, "m_XAxis");
+            string originalYAxisInput = GetCinemachineAxisInput(freeLook, "m_YAxis");
+            bool originalIsKinematic = chassisBody.isKinematic;
+            RigidbodyInterpolation originalInterpolation = chassisBody.interpolation;
+            Vector3 originalPosition = chassisBody.position;
+            Quaternion originalRotation = chassisBody.rotation;
+            Vector3 originalVelocity = chassisBody.velocity;
+            Vector3 originalAngularVelocity = chassisBody.angularVelocity;
+            GameObject obstacle = null;
+
+            try
+            {
+                SetCinemachineAxisInput(freeLook, "m_XAxis", string.Empty);
+                SetCinemachineAxisInput(freeLook, "m_YAxis", string.Empty);
+                chassisBody.isKinematic = true;
+                chassisBody.interpolation = RigidbodyInterpolation.Interpolate;
+                chassisBody.velocity = Vector3.zero;
+                chassisBody.angularVelocity = Vector3.zero;
+
+                yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
+
+                for (int frame = 0; frame < 8; frame++)
+                {
+                    SetCinemachineAxisValue(freeLook, "m_XAxis", originalXAxis + frame * 12f);
+                    SetCinemachineAxisValue(freeLook, "m_YAxis", Mathf.Lerp(0.25f, 0.75f, frame / 7f));
+                    chassisBody.MovePosition(chassisBody.position + new Vector3(0.08f, 0f, -0.04f));
+
+                    yield return new WaitForFixedUpdate();
+                    yield return null;
+
+                    Assert.That(
+                        Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                        Is.LessThan(1f),
+                        "The line of fire must follow the final camera orientation while movement and orbit input occur together.");
+                    Assert.That(
+                        Vector3.Angle(gunRotation.transform.up, -sceneCamera.transform.forward),
+                        Is.LessThan(1f),
+                        "The player turret must consume the current frame's final camera orientation.");
+                    Assert.That(
+                        crosshairRect.anchorMin.x,
+                        Is.EqualTo(sceneCamera.rect.center.x).Within(0.01f));
+                    Assert.That(
+                        crosshairRect.anchorMin.y,
+                        Is.EqualTo(sceneCamera.rect.center.y).Within(0.01f));
+                }
+
+                Vector3 unobstructedCameraPosition = sceneCamera.transform.position;
+                Vector3 cameraOrbitOffset = unobstructedCameraPosition - lookAt.position;
+                Assert.That(cameraOrbitOffset.sqrMagnitude, Is.GreaterThan(1f));
+
+                obstacle = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                obstacle.name = "CameraAimCollisionProbe";
+                obstacle.transform.position = unobstructedCameraPosition - cameraOrbitOffset.normalized * 0.3f;
+                obstacle.transform.rotation = Quaternion.LookRotation(cameraOrbitOffset.normalized);
+                obstacle.transform.localScale = new Vector3(3f, 3f, 0.25f);
+
+                Vector3 previousCollisionForward = sceneCamera.transform.forward;
+                for (int frame = 0; frame < 4; frame++)
+                {
+                    yield return null;
+
+                    Assert.That(
+                        Vector3.Angle(previousCollisionForward, sceneCamera.transform.forward),
+                        Is.LessThan(5f),
+                        "A stationary collision correction must not introduce a frame-sized camera oscillation.");
+                    Assert.That(
+                        Vector3.Angle(GetAimDirection(laserPointer), -sceneCamera.transform.forward),
+                        Is.LessThan(1f),
+                        "The line of fire must follow the collision-corrected final camera orientation.");
+                    Assert.That(
+                        Vector3.Angle(gunRotation.transform.up, -sceneCamera.transform.forward),
+                        Is.LessThan(1f),
+                        "The player turret must follow the collision-corrected final camera orientation without a frame of lag.");
+
+                    previousCollisionForward = sceneCamera.transform.forward;
+                }
+
+                Assert.That(
+                    Vector3.Distance(sceneCamera.transform.position, lookAt.position),
+                    Is.LessThan(Vector3.Distance(unobstructedCameraPosition, lookAt.position) - 0.05f),
+                    "Camera collision handling must move the final camera toward the target when an obstacle blocks the orbit.");
+            }
+            finally
+            {
+                if (obstacle != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(obstacle);
+                }
+
+                SetCinemachineAxisInput(freeLook, "m_XAxis", originalXAxisInput);
+                SetCinemachineAxisInput(freeLook, "m_YAxis", originalYAxisInput);
+                SetCinemachineAxisValue(freeLook, "m_XAxis", originalXAxis);
+                SetCinemachineAxisValue(freeLook, "m_YAxis", originalYAxis);
+                chassisBody.isKinematic = originalIsKinematic;
+                chassisBody.interpolation = originalInterpolation;
+                chassisBody.position = originalPosition;
+                chassisBody.rotation = originalRotation;
+                chassisBody.velocity = originalVelocity;
+                chassisBody.angularVelocity = originalAngularVelocity;
+            }
+        }
+
         private IEnumerator LoadIntegrationScene()
         {
             previousActiveScene = SceneManager.GetActiveScene();
@@ -530,6 +690,21 @@ namespace RobotArena.PlayerWeapon.Tests
             Assert.That(valueField, Is.Not.Null);
             valueField.SetValue(axis, value);
             axisField.SetValue(freeLook, axis);
+        }
+
+        private static float GetCinemachineAxisValue(Component freeLook, string axisName)
+        {
+            FieldInfo axisField = freeLook.GetType().GetField(
+                axisName,
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(axisField, Is.Not.Null);
+
+            object axis = axisField.GetValue(freeLook);
+            FieldInfo valueField = axis.GetType().GetField(
+                "Value",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(valueField, Is.Not.Null);
+            return (float)valueField.GetValue(axis);
         }
 
         private static string GetCinemachineAxisInput(Component freeLook, string axisName)
