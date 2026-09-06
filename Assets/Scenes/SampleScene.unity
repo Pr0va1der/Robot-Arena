@@ -29553,7 +29553,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   laserDotPrefab: {fileID: 2486361104094463660, guid: 8d037b33b848b3e419aaacc805ff487f, type: 3}
-  localAimAxis: {x: 0, y: 1, z: 0}
+  localAimAxis: {x: 0, y: -1, z: 0}
 --- !u!120 &2082693417
 LineRenderer:
   serializedVersion: 2

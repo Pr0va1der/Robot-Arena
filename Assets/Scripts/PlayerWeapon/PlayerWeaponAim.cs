@@ -39,10 +39,10 @@ namespace RobotArena.PlayerWeapon
                 minElevation,
                 maxElevation);
 
-            // The imported turret uses local +Y as its forward and firing axis.
-            // Align that axis with the final camera direction.
+            // The imported Armature fires along local -Y. Keep the model upright
+            // while aligning that axis with the final camera direction.
             return Quaternion.Euler(
-                90f + elevation,
+                -90f + elevation,
                 CameraOrbitYaw(cameraForward),
                 0f);
         }

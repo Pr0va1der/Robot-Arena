@@ -28,7 +28,7 @@ namespace RobotArena.PlayerWeapon.Tests
             Quaternion turretRotation = PlayerWeaponAim.TurretRotation(cameraForward, -45f, 45f);
 
             Assert.That(
-                Vector3.Angle(turretRotation * Vector3.up, cameraForward),
+                Vector3.Angle(turretRotation * Vector3.down, cameraForward),
                 Is.LessThan(0.01f));
         }
 
@@ -52,12 +52,12 @@ namespace RobotArena.PlayerWeapon.Tests
 
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(110f, 35f, 0f));
+                    Quaternion.Euler(-70f, 35f, 0f));
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
-                    Quaternion.Euler(110f, 35f, 0f) * Vector3.up);
+                    Quaternion.Euler(-70f, 35f, 0f) * Vector3.down);
 
-                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.25f));
+                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.25f));
             }
         }
 
@@ -70,12 +70,12 @@ namespace RobotArena.PlayerWeapon.Tests
 
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(70f, 35f, 0f));
+                    Quaternion.Euler(-110f, 35f, 0f));
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
-                    Quaternion.Euler(70f, 35f, 0f) * Vector3.up);
+                    Quaternion.Euler(-110f, 35f, 0f) * Vector3.down);
 
-                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.25f));
+                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.25f));
             }
         }
 
@@ -85,24 +85,24 @@ namespace RobotArena.PlayerWeapon.Tests
             using (AimFixture fixture = new AimFixture("LimitAimCamera", "LimitAimWeapon"))
             {
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(70f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(135f, 0f, 0f));
-                yield return null;
-                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.65f));
-
-                fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(110f, 0f, 0f));
-                yield return null;
-                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.25f));
-
-                fixture.CameraObject.transform.rotation = Quaternion.Euler(-70f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(45f, 0f, 0f));
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-45f, 0f, 0f));
                 yield return null;
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.65f));
 
-                fixture.CameraObject.transform.rotation = Quaternion.Euler(-20f, 0f, 0f);
-                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(70f, 0f, 0f));
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-70f, 0f, 0f));
                 yield return null;
                 Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.LessThan(-0.25f));
+
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(-70f, 0f, 0f);
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-135f, 0f, 0f));
+                yield return null;
+                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.65f));
+
+                fixture.CameraObject.transform.rotation = Quaternion.Euler(-20f, 0f, 0f);
+                yield return WaitForRotation(fixture.WeaponObject, Quaternion.Euler(-110f, 0f, 0f));
+                yield return null;
+                Assert.That(GetAimDirection(fixture.LaserPointer).y, Is.GreaterThan(0.25f));
             }
         }
 
@@ -111,7 +111,7 @@ namespace RobotArena.PlayerWeapon.Tests
         {
             using (AimFixture fixture = new AimFixture("SmoothAimCamera", "SmoothAimWeapon"))
             {
-                Quaternion expectedRotation = Quaternion.Euler(110f, 35f, 0f);
+                Quaternion expectedRotation = Quaternion.Euler(-70f, 35f, 0f);
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 35f, 0f);
 
                 yield return null;
@@ -119,7 +119,7 @@ namespace RobotArena.PlayerWeapon.Tests
                 AssertWeaponRotation(fixture.WeaponObject, expectedRotation);
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
-                    expectedRotation * Vector3.up);
+                    expectedRotation * Vector3.down);
             }
         }
 
@@ -131,7 +131,7 @@ namespace RobotArena.PlayerWeapon.Tests
                 fixture.CameraObject.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(110f, 0f, 0f));
+                    Quaternion.Euler(-70f, 0f, 0f));
                 yield return null;
                 Vector3 settledAimDirection = GetAimDirection(fixture.LaserPointer);
 
@@ -152,7 +152,7 @@ namespace RobotArena.PlayerWeapon.Tests
 
                 yield return WaitForRotation(
                     fixture.WeaponObject,
-                    Quaternion.Euler(90f, 0f, 0f));
+                    Quaternion.Euler(-90f, 0f, 0f));
                 yield return WaitForAimDirection(
                     fixture.LaserPointer,
                     Vector3.forward);
@@ -224,7 +224,7 @@ namespace RobotArena.PlayerWeapon.Tests
             Vector3 upperCameraDirection = sceneCamera.transform.forward;
             Vector3 upperAimDirection = GetAimDirection(laserPointer);
             Assert.That(upperCameraDirection.y, Is.LessThan(0f));
-            Assert.That(upperAimDirection.y, Is.GreaterThan(0.05f));
+            Assert.That(upperAimDirection.y, Is.LessThan(-0.05f));
 
             SetCinemachineYAxisValue(freeLook, 0.1f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
@@ -233,7 +233,7 @@ namespace RobotArena.PlayerWeapon.Tests
             Vector3 lowerCameraDirection = sceneCamera.transform.forward;
             Vector3 lowerAimDirection = GetAimDirection(laserPointer);
             Assert.That(lowerCameraDirection.y, Is.GreaterThan(upperCameraDirection.y));
-            Assert.That(lowerAimDirection.y, Is.LessThan(upperAimDirection.y));
+            Assert.That(lowerAimDirection.y, Is.GreaterThan(upperAimDirection.y));
         }
 
         [UnityTest]
@@ -465,7 +465,7 @@ namespace RobotArena.PlayerWeapon.Tests
                         Is.LessThan(1f),
                         "The line of fire must follow the final camera orientation while movement and orbit input occur together.");
                     Assert.That(
-                        Vector3.Angle(gunRotation.transform.up, sceneCamera.transform.forward),
+                        Vector3.Angle(-gunRotation.transform.up, sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The player turret must consume the current frame's final camera orientation.");
                 }
@@ -500,7 +500,7 @@ namespace RobotArena.PlayerWeapon.Tests
                         Is.LessThan(1f),
                         "The line of fire must follow the collision-corrected final camera orientation.");
                     Assert.That(
-                        Vector3.Angle(gunRotation.transform.up, sceneCamera.transform.forward),
+                        Vector3.Angle(-gunRotation.transform.up, sceneCamera.transform.forward),
                         Is.LessThan(1f),
                         "The player turret must follow the collision-corrected final camera orientation without a frame of lag.");
 
@@ -1043,7 +1043,7 @@ namespace RobotArena.PlayerWeapon.Tests
             Component laserPointer = laserObject.AddComponent(laserPointerType);
             PlayerWeaponTestReflection.SetField(laserPointer, "barrel", weaponObject.transform);
             PlayerWeaponTestReflection.SetField(laserPointer, "maxDistance", 100f);
-            PlayerWeaponTestReflection.SetField(laserPointer, "localAimAxis", Vector3.up);
+            PlayerWeaponTestReflection.SetField(laserPointer, "localAimAxis", Vector3.down);
             return laserPointer;
         }
 
