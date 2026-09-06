@@ -1508,6 +1508,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   respawnPoint: {fileID: 710913428}
+  cameraSupportPoint: {fileID: 690579012}
   damageOnRespawn: 50
 --- !u!1 &121871538
 GameObject:

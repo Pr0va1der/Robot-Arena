@@ -271,6 +271,34 @@ public class PlayerShooting : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Starts the ultimate through the same weapon-controller state machine as
+    /// the gameplay input path. This keeps scene-level animation checks on a
+    /// public behavior seam instead of reaching into the private Animator
+    /// implementation.
+    /// </summary>
+    public bool TryStartUltimate()
+    {
+        if (weaponController == null || weaponController.IsRecoilActive || !IsUltimateReady)
+        {
+            return false;
+        }
+
+        PlayerWeaponCommand command = weaponController.Tick(
+            Time.time,
+            fireHeld: false,
+            ultimatePressed: true,
+            ultimateReady: IsUltimateReady,
+            fireVolleyAvailable: false);
+        if (command != PlayerWeaponCommand.StartUltimate)
+        {
+            return false;
+        }
+
+        StartUltimate();
+        return true;
+    }
+
     private void FireBullets(Vector3 direction)
     {
         FireBullet(firePointLeft, direction);
