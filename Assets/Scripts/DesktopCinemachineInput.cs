@@ -51,7 +51,9 @@ public sealed class DesktopCinemachineInput : MonoBehaviour, AxisState.IInputAxi
             case 0:
                 return look.x;
             case 1:
-                return look.y;
+                // Cinemachine's FreeLook vertical axis increases toward the
+                // lower camera orbit. Keep mouse-up aligned with a rising view.
+                return -look.y;
             default:
                 return 0f;
         }

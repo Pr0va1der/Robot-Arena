@@ -44,6 +44,119 @@ namespace RobotArena.PlayerWeapon.Tests
         }
 
         [UnityTest]
+        public IEnumerator SampleScene_starts_with_level_camera_and_turret()
+        {
+            yield return LoadIntegrationScene();
+
+            Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
+            Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
+            Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
+            Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
+            Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
+            Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
+            Component freeLook = FindSceneComponent(integrationScene, freeLookType);
+
+            Assert.That(sceneCamera, Is.Not.Null);
+            Assert.That(gunRotation, Is.Not.Null);
+            Assert.That(laserPointer, Is.Not.Null);
+            Assert.That(freeLook, Is.Not.Null);
+
+            PropertyInfo lookAtProperty = freeLookType.GetProperty(
+                "LookAt",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(lookAtProperty, Is.Not.Null);
+            Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
+            Assert.That(lookAt, Is.Not.Null);
+
+            yield return new WaitForFixedUpdate();
+            yield return null;
+
+            Vector3 lookAtViewport = sceneCamera.WorldToViewportPoint(lookAt.position);
+            string startupPose =
+                $"camera={sceneCamera.name} position={sceneCamera.transform.position} " +
+                $"forward={sceneCamera.transform.forward} " +
+                $"turretForward={-gunRotation.transform.up} " +
+                $"lookAt={lookAt.position} viewport={lookAtViewport} " +
+                $"euler={sceneCamera.transform.eulerAngles} " +
+                $"yAxis={GetCinemachineAxisValue(freeLook, "m_YAxis")}";
+            Assert.That(
+                Mathf.Abs(sceneCamera.transform.forward.y),
+                Is.LessThan(0.05f),
+                "The startup camera must look level instead of down from the initial orbit. " +
+                startupPose);
+            Assert.That(
+                Mathf.Abs((-gunRotation.transform.up).y),
+                Is.LessThan(0.05f),
+                "The startup turret must keep its line of fire level with the camera. " +
+                startupPose);
+            Assert.That(
+                Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
+                Is.LessThan(1f),
+                "The startup turret and laser must follow the final camera direction.");
+        }
+
+        [UnityTest]
+        public IEnumerator SampleScene_vertical_aiming_reaches_symmetric_world_limits()
+        {
+            yield return LoadIntegrationScene();
+
+            Type freeLookType = PlayerWeaponTestReflection.FindRuntimeType("Cinemachine.CinemachineFreeLook");
+            Type gunRotationType = PlayerWeaponTestReflection.FindRuntimeType("GunRotation");
+            Type laserPointerType = PlayerWeaponTestReflection.FindRuntimeType("LaserPointer");
+            Type inputProviderType = PlayerWeaponTestReflection.FindRuntimeType("DesktopCinemachineInput");
+            Assert.That(freeLookType, Is.Not.Null);
+            Assert.That(gunRotationType, Is.Not.Null);
+            Assert.That(laserPointerType, Is.Not.Null);
+            Assert.That(inputProviderType, Is.Not.Null);
+
+            Component freeLook = FindSceneComponent(integrationScene, freeLookType);
+            Component gunRotation = FindSceneComponent(integrationScene, gunRotationType);
+            Component laserPointer = FindSceneComponent(integrationScene, laserPointerType);
+            Behaviour inputProvider = FindSceneComponent(integrationScene, inputProviderType) as Behaviour;
+            Camera sceneCamera = (Camera)FindSceneComponent(integrationScene, typeof(Camera));
+            Assert.That(freeLook, Is.Not.Null);
+            Assert.That(gunRotation, Is.Not.Null);
+            Assert.That(laserPointer, Is.Not.Null);
+            Assert.That(inputProvider, Is.Not.Null);
+            Assert.That(sceneCamera, Is.Not.Null);
+
+            PropertyInfo lookAtProperty = freeLookType.GetProperty(
+                "LookAt",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(lookAtProperty, Is.Not.Null);
+            Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
+            Assert.That(lookAt, Is.Not.Null);
+
+            float originalYAxis = GetCinemachineAxisValue(freeLook, "m_YAxis");
+            string originalYAxisInput = GetCinemachineAxisInput(freeLook, "m_YAxis");
+            bool originalInputProviderEnabled = inputProvider.enabled;
+
+            try
+            {
+                inputProvider.enabled = false;
+                SetCinemachineAxisInput(freeLook, "m_YAxis", string.Empty);
+
+                SetCinemachineYAxisValue(freeLook, 0.5f);
+                yield return WaitForWorldElevation(sceneCamera, lookAt, 0f, "neutral elevation");
+                yield return WaitForSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer);
+
+                SetCinemachineYAxisValue(freeLook, 0f);
+                yield return WaitForWorldElevation(sceneCamera, lookAt, 45f, "upper elevation limit");
+                yield return WaitForSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer);
+
+                SetCinemachineYAxisValue(freeLook, 1f);
+                yield return WaitForWorldElevation(sceneCamera, lookAt, -45f, "lower elevation limit");
+                yield return WaitForSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer);
+            }
+            finally
+            {
+                SetCinemachineAxisInput(freeLook, "m_YAxis", originalYAxisInput);
+                SetCinemachineYAxisValue(freeLook, originalYAxis);
+                inputProvider.enabled = originalInputProviderEnabled;
+            }
+        }
+
+        [UnityTest]
         public IEnumerator Weapon_and_laser_follow_camera_orbit_upward()
         {
             using (AimFixture fixture = new AimFixture("AimCamera", "AimWeapon"))
@@ -218,8 +331,9 @@ namespace RobotArena.PlayerWeapon.Tests
                 Is.EqualTo(sceneCamera.transform));
 
             SetCinemachineYAxisValue(freeLook, 0.9f);
+            yield return new WaitForSecondsRealtime(0.25f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
-            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
+            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f, 0.05f);
 
             Vector3 upperCameraDirection = sceneCamera.transform.forward;
             Vector3 upperAimDirection = GetAimDirection(laserPointer);
@@ -227,8 +341,9 @@ namespace RobotArena.PlayerWeapon.Tests
             Assert.That(upperAimDirection.y, Is.LessThan(-0.05f));
 
             SetCinemachineYAxisValue(freeLook, 0.1f);
+            yield return new WaitForSecondsRealtime(0.25f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
-            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
+            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f, 0.05f);
 
             Vector3 lowerCameraDirection = sceneCamera.transform.forward;
             Vector3 lowerAimDirection = GetAimDirection(laserPointer);
@@ -1096,6 +1211,24 @@ namespace RobotArena.PlayerWeapon.Tests
                 Is.LessThan(tolerance));
         }
 
+        private static IEnumerator WaitForSceneAimDirectionsMatch(
+            Camera sceneCamera,
+            Component gunRotation,
+            Component laserPointer,
+            float tolerance = 1f,
+            float timeoutSeconds = 2f)
+        {
+            float deadline = Time.realtimeSinceStartup + timeoutSeconds;
+            while (Time.realtimeSinceStartup < deadline &&
+                   (Vector3.Angle(-gunRotation.transform.up, sceneCamera.transform.forward) >= tolerance ||
+                    Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward) >= tolerance))
+            {
+                yield return null;
+            }
+
+            AssertSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer, tolerance);
+        }
+
         private static Component FindSceneComponent(Scene scene, Type componentType)
         {
             foreach (GameObject root in scene.GetRootGameObjects())
@@ -1205,11 +1338,77 @@ namespace RobotArena.PlayerWeapon.Tests
             return (float)field.GetValue(component);
         }
 
-        private static void AssertLookAtScreenX(Camera camera, Transform lookAt, float expected)
+        private static void AssertLookAtScreenX(
+            Camera camera,
+            Transform lookAt,
+            float expected,
+            float tolerance = 0.03f)
         {
             Vector3 viewportPoint = camera.WorldToViewportPoint(lookAt.position);
             Assert.That(viewportPoint.z, Is.GreaterThan(0f));
-            Assert.That(viewportPoint.x, Is.EqualTo(expected).Within(0.03f));
+            Assert.That(
+                viewportPoint.x,
+                Is.EqualTo(expected).Within(tolerance),
+                $"camera={camera.transform.position} forward={camera.transform.forward} " +
+                $"lookAt={lookAt.position} viewport={viewportPoint}.");
+        }
+
+        private static void AssertWorldElevation(
+            Camera camera,
+            Transform lookAt,
+            float expected,
+            string poseName)
+        {
+            Vector3 forward = camera.transform.forward.normalized;
+            float actual = GetWorldElevation(forward);
+
+            Assert.That(
+                actual,
+                Is.EqualTo(expected).Within(2f),
+                $"Unexpected {poseName}: position={camera.transform.position} " +
+                $"lookAt={(lookAt == null ? "<not provided>" : lookAt.position.ToString())} " +
+                $"forward={forward} elevation={actual}.");
+        }
+
+        private static IEnumerator WaitForWorldElevation(
+            Camera camera,
+            Transform lookAt,
+            float expected,
+            string poseName,
+            float tolerance = 2f,
+            float timeoutSeconds = 2f)
+        {
+            float deadline = Time.realtimeSinceStartup + timeoutSeconds;
+            while (Mathf.Abs(GetWorldElevation(camera.transform.forward) - expected) >= tolerance &&
+                   Time.realtimeSinceStartup < deadline)
+            {
+                yield return null;
+            }
+
+            AssertWorldElevation(camera, lookAt, expected, poseName);
+        }
+
+        private static float GetWorldElevation(Vector3 forward)
+        {
+            forward.Normalize();
+            float horizontalMagnitude = new Vector2(forward.x, forward.z).magnitude;
+            return Mathf.Atan2(forward.y, horizontalMagnitude) * Mathf.Rad2Deg;
+        }
+
+        private static void AssertSceneAimDirectionsMatch(
+            Camera sceneCamera,
+            Component gunRotation,
+            Component laserPointer,
+            float tolerance = 1f)
+        {
+            Assert.That(
+                Vector3.Angle(-gunRotation.transform.up, sceneCamera.transform.forward),
+                Is.LessThan(tolerance),
+                "The player turret must follow the final camera elevation.");
+            Assert.That(
+                Vector3.Angle(GetAimDirection(laserPointer), sceneCamera.transform.forward),
+                Is.LessThan(tolerance),
+                "The line of fire must follow the final camera elevation.");
         }
 
         private static int GetExecutionOrder(string typeName)

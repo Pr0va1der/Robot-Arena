@@ -11,3 +11,7 @@ The standard five-label triage vocabulary is used. See `docs/agents/triage-label
 ### Domain docs
 
 This repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.
+
+### Unity Editor and licensing
+
+Use the licensed Unity installation and test procedure documented in `docs/agents/unity-editor.md`.
