@@ -24,6 +24,10 @@ public class PlayerShooting : MonoBehaviour
     [Header("Aim")]
     public LaserPointer laserPointer;
 
+    [Header("Weapon Audio")]
+    [SerializeField] private AudioClip volleySfx;
+    [SerializeField] private AudioClip ultimateSfx;
+
     [Header("Ulti Settings")]
     public float ultimateForce = 15f;
     [Min(0f)] public float ultimateCooldown = 8f;
@@ -38,6 +42,7 @@ public class PlayerShooting : MonoBehaviour
     private Animator animator;
     private Rigidbody rb;
     private PlayerWeaponController weaponController;
+    private IPlayerWeaponAudio audioPlayback;
     private Coroutine ultimateAnimationRoutine;
     private float nextUltimateTime;
     private float defaultAnimatorSpeed = 1f;
@@ -46,6 +51,11 @@ public class PlayerShooting : MonoBehaviour
 
     public float UltimateCooldownRemaining => Mathf.Max(0f, nextUltimateTime - Time.time);
     public bool IsUltimateReady => UltimateCooldownRemaining <= 0f;
+
+    private void Awake()
+    {
+        audioPlayback = new PlayerWeaponAudioPlayback(transform, volleySfx, ultimateSfx);
+    }
 
     private void Start()
     {
@@ -175,6 +185,10 @@ public class PlayerShooting : MonoBehaviour
         FinishShootAnimation();
         ApplyUltimateForce();
         SpawnUltimateEffect();
+        if (HasCompleteUltimateAudioConfiguration())
+        {
+            audioPlayback?.Play(PlayerWeaponAudioCue.Ultimate);
+        }
         nextUltimateTime = Time.time + ultimateCooldown;
 
         if (animator == null)
@@ -268,6 +282,7 @@ public class PlayerShooting : MonoBehaviour
 
         PlayShootAnimation();
         FireBullets(direction);
+        audioPlayback?.Play(PlayerWeaponAudioCue.Volley);
         return true;
     }
 
@@ -371,5 +386,10 @@ public class PlayerShooting : MonoBehaviour
 
         GameObject effect = Instantiate(ultimateEffectPrefab, spawnPos, spawnRot);
         Destroy(effect, ultiEffectLifetime);
+    }
+
+    private bool HasCompleteUltimateAudioConfiguration()
+    {
+        return rb != null && cameraTransform != null && ultimateEffectPrefab != null;
     }
 }
