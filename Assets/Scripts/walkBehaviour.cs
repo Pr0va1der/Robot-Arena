@@ -33,14 +33,17 @@ public class walkBehaviour : StateMachineBehaviour
 
         if (points != null && points.Length > 0)
         {
-            agent.isStopped = false;
-            agent.SetDestination(points[currentIndex].position);
+            if (agent != null && agent.isOnNavMesh)
+            {
+                agent.isStopped = false;
+                agent.SetDestination(points[currentIndex].position);
+            }
         }
     }
 
     override public void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
     {
-        if (points == null || points.Length == 0) return;
+        if (agent == null || !agent.isOnNavMesh || points == null || points.Length == 0) return;
 
         if (isWaiting)
         {
@@ -72,7 +75,7 @@ public class walkBehaviour : StateMachineBehaviour
 
     override public void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
     {
-        if (agent != null)
+        if (agent != null && agent.isOnNavMesh)
             agent.isStopped = true;
     }
 }

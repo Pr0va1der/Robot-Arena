@@ -21,7 +21,8 @@ public class gunsUpBehaviour : StateMachineBehaviour
     override public void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
     {
         agent = animator.GetComponent<NavMeshAgent>();
-        agent.isStopped = false;
+        if (agent != null && agent.isOnNavMesh)
+            agent.isStopped = false;
 
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
         if (playerObj != null)
@@ -50,7 +51,7 @@ public class gunsUpBehaviour : StateMachineBehaviour
 
     override public void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
     {
-        if (agent == null || targetPoint == null)
+        if (agent == null || !agent.isOnNavMesh || targetPoint == null)
             return;
 
         if (Time.time >= nextUpdateTime)
@@ -124,7 +125,7 @@ public class gunsUpBehaviour : StateMachineBehaviour
 
     override public void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
     {
-        if (agent != null)
+        if (agent != null && agent.isOnNavMesh)
             agent.isStopped = true;
         canShoot = false;
     }

@@ -5,8 +5,13 @@ mergeInto(LibraryManager.library, {
         state.hostName = hostName;
         state.sdk = null;
         state.gameReady = false;
+        state.gameReadyRequested = false;
         state.finished = false;
         state.snapshot = null;
+        state.pendingMessages = [];
+        state.flushPendingMessages = function () {
+            return robotArenaPlatformProbeFlushPendingMessages(state);
+        };
         window.__robotArenaPlatformProbe = state;
 
         var sendSnapshot = function (snapshot) {
@@ -158,7 +163,11 @@ mergeInto(LibraryManager.library, {
     RobotArenaPlatformProbe_MarkGameReady: function (hostNamePtr) {
         var hostName = UTF8ToString(hostNamePtr);
         var state = window.__robotArenaPlatformProbe;
-        if (!state || state.hostName !== hostName || state.gameReady || !state.sdk) {
+        if (!state ||
+            state.hostName !== hostName ||
+            state.gameReady ||
+            state.gameReadyRequested ||
+            !state.sdk) {
             return;
         }
 
@@ -167,6 +176,7 @@ mergeInto(LibraryManager.library, {
             return;
         }
 
+        state.gameReadyRequested = true;
         try {
             loadingApi.ready();
             state.gameReady = true;
@@ -191,13 +201,47 @@ function sendSnapshotFromState(state, snapshot) {
 }
 
 function robotArenaPlatformProbeSendMessage(state, methodName, value) {
+    var receiver = robotArenaPlatformProbeGetReceiver();
+    if (!receiver) {
+        state.pendingMessages = state.pendingMessages || [];
+        state.pendingMessages.push({ methodName: methodName, value: value });
+        return false;
+    }
+
+    robotArenaPlatformProbeFlushPendingMessages(state, receiver);
+    receiver(state.hostName, methodName, value);
+    return true;
+}
+
+function robotArenaPlatformProbeGetReceiver() {
     if (typeof SendMessage === 'function') {
-        SendMessage(state.hostName, methodName, value);
-        return;
+        return function (hostName, methodName, value) {
+            SendMessage(hostName, methodName, value);
+        };
     }
 
     var unityInstance = window.unityInstance || window.gameInstance;
     if (unityInstance && typeof unityInstance.SendMessage === 'function') {
-        unityInstance.SendMessage(state.hostName, methodName, value);
+        return function (hostName, methodName, value) {
+            unityInstance.SendMessage(hostName, methodName, value);
+        };
     }
+
+    return null;
+}
+
+function robotArenaPlatformProbeFlushPendingMessages(state, receiver) {
+    receiver = receiver || robotArenaPlatformProbeGetReceiver();
+    if (!receiver) {
+        return false;
+    }
+
+    var pendingMessages = state.pendingMessages || [];
+    state.pendingMessages = [];
+    for (var index = 0; index < pendingMessages.length; index += 1) {
+        var pendingMessage = pendingMessages[index];
+        receiver(state.hostName, pendingMessage.methodName, pendingMessage.value);
+    }
+
+    return true;
 }

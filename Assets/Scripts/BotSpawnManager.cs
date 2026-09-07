@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using RobotArena.Session;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotRegistry, IPlayerRecovery
 {
@@ -8,6 +9,7 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
     public List<WaveConfiguration> waveConfigurations = WaveConfiguration.CreateDefaults();
     public float intermissionDuration = 5f;
     [Range(0f, 1f)] public float intermissionHealthRestoreFraction = 0.20f;
+    public float navMeshPlacementSearchRadius = 2f;
 
     [Header("Bots")]
     public GameObject botPrefab;
@@ -42,10 +44,35 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
             pauseMenu?.PauseCoordinator);
         session.StateChanged += OnSessionStateChanged;
 
-        SessionBotRegistration[] placedBots = FindObjectsOfType<SessionBotRegistration>();
-        var initialBots = new List<BotId>(placedBots.Length);
+        SessionBotRegistration[] registrations = FindObjectsOfType<SessionBotRegistration>();
+        var placedBots = new List<SessionBotRegistration>(registrations.Length);
+        foreach (SessionBotRegistration registration in registrations)
+        {
+            if (registration.gameObject.scene == gameObject.scene)
+            {
+                placedBots.Add(registration);
+            }
+        }
+
+        var initialBots = new List<BotId>(placedBots.Count);
         foreach (SessionBotRegistration bot in placedBots)
         {
+            NavMeshAgent agent = bot.GetComponentInChildren<NavMeshAgent>(true);
+            bool isBot = agent != null || bot.GetComponentInChildren<BOBotPatrol>(true) != null;
+            if (isBot &&
+                !BotNavMeshPlacement.TryPlace(
+                        bot.gameObject,
+                        bot.transform.position,
+                        bot.transform.rotation,
+                        navMeshPlacementSearchRadius,
+                        out string failureReason))
+            {
+                Debug.LogError(
+                    "Unable to place placed bot " + bot.name + " on NavMesh: " + failureReason);
+                bot.gameObject.SetActive(false);
+                continue;
+            }
+
             bot.Connect(this);
             initialBots.Add(bot.Id);
             BotCombatReporter.Ensure(bot.gameObject)?.EnterCombat();
@@ -96,6 +123,19 @@ public class BotSpawnManager : MonoBehaviour, ISessionBotFactory, ISessionBotReg
 
         Transform point = spawnPoints[Random.Range(0, spawnPoints.Count)];
         GameObject bot = Instantiate(botPrefab, point.position, point.rotation);
+        if (!BotNavMeshPlacement.TryPlace(
+                bot,
+                point.position,
+                point.rotation,
+                navMeshPlacementSearchRadius,
+                out string failureReason))
+        {
+            Debug.LogError(
+                "Unable to place wave bot at " + point.name + " on NavMesh: " + failureReason);
+            Destroy(bot);
+            return false;
+        }
+
         SessionBotRegistration registration = bot.GetComponentInChildren<SessionBotRegistration>();
         if (registration == null)
         {
