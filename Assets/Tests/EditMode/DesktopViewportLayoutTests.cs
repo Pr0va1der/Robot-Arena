@@ -28,6 +28,28 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
+        public void Exact_16_by_9_display_uses_the_full_viewport()
+        {
+            NormalizedViewport viewport = DesktopViewportLayout.Calculate(1920, 1080);
+
+            Assert.That(viewport.X, Is.EqualTo(0f));
+            Assert.That(viewport.Y, Is.EqualTo(0f));
+            Assert.That(viewport.Width, Is.EqualTo(1f));
+            Assert.That(viewport.Height, Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void Resizing_the_display_recalculates_the_viewport()
+        {
+            NormalizedViewport wideViewport = DesktopViewportLayout.Calculate(2560, 1080);
+            NormalizedViewport exactViewport = DesktopViewportLayout.Calculate(1920, 1080);
+
+            Assert.That(wideViewport.Width, Is.EqualTo(0.75f).Within(0.0001f));
+            Assert.That(exactViewport.Width, Is.EqualTo(1f));
+            Assert.That(exactViewport.Height, Is.EqualTo(1f));
+        }
+
+        [Test]
         public void Invalid_display_dimensions_are_rejected()
         {
             Assert.That(
