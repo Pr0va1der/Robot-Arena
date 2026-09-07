@@ -8,9 +8,10 @@ JSON report next to it.
 The release profile is intentionally desktop-first: it uses Brotli, DXT, engine
 stripping, and WebGL managed stripping at `Low`. Before the build it applies a
 WebGL-only override to every `Texture2D` (maximum 1024 px, DXT5 Crunch at quality
-50). This override is stored in the texture `.meta` files, so a later release
-build is incremental and idempotent; default/Standalone import settings are not
-changed.
+50). This override is stored in the texture `.meta` files, so reapplying the
+texture policy is idempotent; default/Standalone import settings are not
+changed. The release command still cleans its output directory and performs a
+fresh player build each time.
 
 The gate measures the sum of uncompressed ZIP entries and fails above the
 80,000,000-byte internal budget. The archive must contain exactly one root
