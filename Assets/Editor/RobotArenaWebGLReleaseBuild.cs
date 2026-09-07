@@ -36,6 +36,9 @@ namespace RobotArena.WebGL.Editor
             WebGLDebugSymbolMode previousDebugSymbolMode = PlayerSettings.WebGL.debugSymbolMode;
             WebGLCompressionFormat previousCompressionFormat = PlayerSettings.WebGL.compressionFormat;
             bool previousDecompressionFallback = PlayerSettings.WebGL.decompressionFallback;
+            bool previousStripEngineCode = PlayerSettings.stripEngineCode;
+            ManagedStrippingLevel previousManagedStrippingLevel =
+                PlayerSettings.GetManagedStrippingLevel(BuildTargetGroup.WebGL);
 
             try
             {
@@ -47,6 +50,10 @@ namespace RobotArena.WebGL.Editor
                 PlayerSettings.WebGL.debugSymbolMode = WebGLDebugSymbolMode.Off;
                 PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Brotli;
                 PlayerSettings.WebGL.decompressionFallback = false;
+                PlayerSettings.stripEngineCode = true;
+                PlayerSettings.SetManagedStrippingLevel(
+                    BuildTargetGroup.WebGL,
+                    ManagedStrippingLevel.Low);
 
                 string[] activeScenes = EditorBuildSettingsScene.GetActiveSceneList(EditorBuildSettings.scenes);
                 if (activeScenes.Length == 0)
@@ -111,6 +118,10 @@ namespace RobotArena.WebGL.Editor
                 PlayerSettings.WebGL.debugSymbolMode = previousDebugSymbolMode;
                 PlayerSettings.WebGL.compressionFormat = previousCompressionFormat;
                 PlayerSettings.WebGL.decompressionFallback = previousDecompressionFallback;
+                PlayerSettings.stripEngineCode = previousStripEngineCode;
+                PlayerSettings.SetManagedStrippingLevel(
+                    BuildTargetGroup.WebGL,
+                    previousManagedStrippingLevel);
             }
         }
 
@@ -148,6 +159,8 @@ namespace RobotArena.WebGL.Editor
                 texturePolicyFormat = TextureImporterFormat.DXT5Crunched.ToString(),
                 texturePolicyCrunchQuality = WebGLTextureImportPolicy.CrunchQuality,
                 texturePolicyChangedCount = changedTextureCount,
+                stripEngineCode = true,
+                managedStrippingLevel = ManagedStrippingLevel.Low.ToString(),
                 packageErrors = new List<string>(packageResult.Errors),
                 files = files
             };
@@ -191,6 +204,8 @@ namespace RobotArena.WebGL.Editor
             public string texturePolicyFormat;
             public int texturePolicyCrunchQuality;
             public int texturePolicyChangedCount;
+            public bool stripEngineCode;
+            public string managedStrippingLevel;
             public List<string> packageErrors;
             public List<ReleaseFileReport> files;
         }
