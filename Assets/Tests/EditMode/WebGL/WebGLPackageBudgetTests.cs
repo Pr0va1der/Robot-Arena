@@ -1,0 +1,117 @@
+using System;
+using System.IO;
+using System.IO.Compression;
+using NUnit.Framework;
+using RobotArena.WebGL.Editor;
+using UnityEditor;
+
+namespace RobotArena.WebGL.Editor.Tests
+{
+    public sealed class WebGLPackageBudgetTests
+    {
+        private string archivePath;
+
+        [SetUp]
+        public void SetUp()
+        {
+            archivePath = Path.Combine(
+                Path.GetTempPath(),
+                "robot-arena-webgl-budget-" + Guid.NewGuid().ToString("N") + ".zip");
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (File.Exists(archivePath))
+            {
+                File.Delete(archivePath);
+            }
+        }
+
+        [Test]
+        public void Valid_root_index_and_build_entries_pass_under_the_limit()
+        {
+            CreateArchive(
+                ("index.html", 5),
+                ("Build/Game.data", 10),
+                ("Build/Game.wasm", 10));
+
+            WebGLPackageBudgetResult result = WebGLPackageBudget.Measure(archivePath, 30);
+
+            Assert.That(result.IsValid, Is.True);
+            Assert.That(result.IsWithinBudget, Is.True);
+            Assert.That(result.UncompressedBytes, Is.EqualTo(25));
+            Assert.That(result.Errors, Is.Empty);
+        }
+
+        [Test]
+        public void Budget_uses_uncompressed_entry_sizes_not_zip_size()
+        {
+            CreateArchive(("index.html", 1), ("Build/Game.data", 20));
+
+            WebGLPackageBudgetResult result = WebGLPackageBudget.Measure(archivePath, 10);
+
+            Assert.That(result.IsValid, Is.True);
+            Assert.That(result.IsWithinBudget, Is.False);
+            Assert.That(result.IsPassing, Is.False);
+            Assert.That(result.UncompressedBytes, Is.EqualTo(21));
+            Assert.That(string.Join("\n", result.Errors), Does.Contain("exceeds the limit"));
+        }
+
+        [Test]
+        public void Invalid_archive_layout_is_rejected()
+        {
+            CreateArchive(
+                ("nested/index.html", 1),
+                ("Build/Game data.wasm", 1),
+                ("Other/readme.txt", 1));
+
+            WebGLPackageBudgetResult result = WebGLPackageBudget.Measure(archivePath, 100);
+
+            Assert.That(result.IsValid, Is.False);
+            string errors = string.Join("\n", result.Errors);
+            Assert.That(errors, Does.Contain("exactly one index.html at the archive root"));
+            Assert.That(errors, Does.Contain("spaces or non-ASCII characters"));
+            Assert.That(errors, Does.Contain("must be under Build/"));
+        }
+
+        [Test]
+        public void Release_texture_policy_uses_desktop_compression_and_caps_resolution()
+        {
+            TextureImporterPlatformSettings current = new TextureImporterPlatformSettings
+            {
+                overridden = false,
+                maxTextureSize = 2048,
+                textureCompression = TextureImporterCompression.Uncompressed,
+                crunchedCompression = false,
+                compressionQuality = 100,
+                format = TextureImporterFormat.RGBA32
+            };
+
+            TextureImporterPlatformSettings result = WebGLTextureImportPolicy.CreateSettings(current, 1024);
+
+            Assert.That(result.overridden, Is.True);
+            Assert.That(result.maxTextureSize, Is.EqualTo(1024));
+            Assert.That(result.textureCompression, Is.EqualTo(TextureImporterCompression.Compressed));
+            Assert.That(result.crunchedCompression, Is.True);
+            Assert.That(result.compressionQuality, Is.EqualTo(50));
+            Assert.That(result.format, Is.EqualTo(TextureImporterFormat.DXT5Crunched));
+        }
+
+        private void CreateArchive(params (string Name, int Size)[] entries)
+        {
+            using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                foreach ((string name, int size) in entries)
+                {
+                    ZipArchiveEntry entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                    using Stream stream = entry.Open();
+                    for (int index = 0; index < size; index++)
+                    {
+                        stream.WriteByte((byte)(index % 251));
+                    }
+                }
+            }
+        }
+    }
+}

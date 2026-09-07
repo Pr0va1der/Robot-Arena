@@ -1,0 +1,14 @@
+{
+  "name": "RobotArena.WebGL.Editor.Tests",
+  "rootNamespace": "RobotArena.WebGL.Editor.Tests",
+  "includePlatforms": [
+    "Editor"
+  ],
+  "references": [
+    "RobotArena.WebGL.Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

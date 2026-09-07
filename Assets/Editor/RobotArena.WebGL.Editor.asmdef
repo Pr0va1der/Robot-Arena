@@ -1,0 +1,15 @@
+{
+  "name": "RobotArena.WebGL.Editor",
+  "rootNamespace": "RobotArena.WebGL.Editor",
+  "includePlatforms": [
+    "Editor"
+  ],
+  "references": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

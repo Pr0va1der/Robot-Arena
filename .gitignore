@@ -12,6 +12,11 @@
 /Build/Build.zip
 /[Bb]uilds/
 
+# Generated desktop WebGL release artifacts are validated locally and are not source assets.
+/Build/WebGL/RobotArenaRelease/
+/Build/WebGL/RobotArenaRelease-upload.zip
+/Build/WebGL/RobotArenaRelease-report.json
+
 # IDE and editor files
 /.vs/
 /.vscode/
