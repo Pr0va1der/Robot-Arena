@@ -82,6 +82,9 @@ test('buffers SDK snapshot until Unity receiver exists and flushes it', async ()
   assert.equal(
     harness.context.window.__robotArenaPlatformProbe.pendingMessages.length,
     1);
+  assert.doesNotMatch(
+    harness.context.window.__robotArenaPlatformProbe.flushPendingMessages.toString(),
+    /robotArenaPlatformProbeFlushPendingMessages/);
 
   harness.attachUnity();
   harness.context.window.__robotArenaPlatformProbe.flushPendingMessages();

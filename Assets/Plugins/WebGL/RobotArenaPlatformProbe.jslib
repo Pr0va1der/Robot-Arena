@@ -9,8 +9,48 @@ mergeInto(LibraryManager.library, {
         state.finished = false;
         state.snapshot = null;
         state.pendingMessages = [];
-        state.flushPendingMessages = function () {
-            return robotArenaPlatformProbeFlushPendingMessages(state);
+        state.getReceiver = function () {
+            if (typeof SendMessage === 'function') {
+                return function (receiverHostName, methodName, value) {
+                    SendMessage(receiverHostName, methodName, value);
+                };
+            }
+
+            var unityInstance = window.unityInstance || window.gameInstance;
+            if (unityInstance && typeof unityInstance.SendMessage === 'function') {
+                return function (receiverHostName, methodName, value) {
+                    unityInstance.SendMessage(receiverHostName, methodName, value);
+                };
+            }
+
+            return null;
+        };
+        state.flushPendingMessages = function (receiver) {
+            receiver = receiver || state.getReceiver();
+            if (!receiver) {
+                return false;
+            }
+
+            var pendingMessages = state.pendingMessages || [];
+            state.pendingMessages = [];
+            for (var index = 0; index < pendingMessages.length; index += 1) {
+                var pendingMessage = pendingMessages[index];
+                receiver(state.hostName, pendingMessage.methodName, pendingMessage.value);
+            }
+
+            return true;
+        };
+        state.sendMessage = function (methodName, value) {
+            var receiver = state.getReceiver();
+            if (!receiver) {
+                state.pendingMessages = state.pendingMessages || [];
+                state.pendingMessages.push({ methodName: methodName, value: value });
+                return false;
+            }
+
+            state.flushPendingMessages(receiver);
+            receiver(state.hostName, methodName, value);
+            return true;
         };
         window.__robotArenaPlatformProbe = state;
 
@@ -19,11 +59,11 @@ mergeInto(LibraryManager.library, {
             if (typeof console !== 'undefined' && typeof console.info === 'function') {
                 console.info('RobotArena platform probe', snapshot);
             }
-            robotArenaPlatformProbeSendMessage(
-                state,
+            state.sendMessage(
                 'OnPlatformProbeResult',
                 JSON.stringify(snapshot));
         };
+        state.sendSnapshot = sendSnapshot;
         var fail = function (message, timedOut) {
             sendSnapshot({
                 sdkDetected: false,
@@ -90,10 +130,10 @@ mergeInto(LibraryManager.library, {
                 if (sdk && typeof sdk.on === 'function') {
                     try {
                         sdk.on('game_api_pause', function () {
-                            robotArenaPlatformProbeSendMessage(state, 'OnPlatformProbePause', 'true');
+                            state.sendMessage('OnPlatformProbePause', 'true');
                         });
                         sdk.on('game_api_resume', function () {
-                            robotArenaPlatformProbeSendMessage(state, 'OnPlatformProbePause', 'false');
+                            state.sendMessage('OnPlatformProbePause', 'false');
                         });
                     } catch (pauseError) {
                         snapshot.supportsPause = false;
@@ -183,65 +223,15 @@ mergeInto(LibraryManager.library, {
             var snapshot = state.snapshot || {};
             snapshot.gameReady = true;
             snapshot.error = '';
-            sendSnapshotFromState(state, snapshot);
+            if (typeof state.sendSnapshot === 'function') {
+                state.sendSnapshot(snapshot);
+            }
         } catch (error) {
             var failure = state.snapshot || {};
             failure.error = error && error.message ? error.message : 'LoadingAPI.ready failed.';
-            sendSnapshotFromState(state, failure);
+            if (typeof state.sendSnapshot === 'function') {
+                state.sendSnapshot(failure);
+            }
         }
     }
 });
-
-function sendSnapshotFromState(state, snapshot) {
-    var serialized = JSON.stringify(snapshot);
-    if (typeof console !== 'undefined' && typeof console.info === 'function') {
-        console.info('RobotArena platform probe', snapshot);
-    }
-    robotArenaPlatformProbeSendMessage(state, 'OnPlatformProbeResult', serialized);
-}
-
-function robotArenaPlatformProbeSendMessage(state, methodName, value) {
-    var receiver = robotArenaPlatformProbeGetReceiver();
-    if (!receiver) {
-        state.pendingMessages = state.pendingMessages || [];
-        state.pendingMessages.push({ methodName: methodName, value: value });
-        return false;
-    }
-
-    robotArenaPlatformProbeFlushPendingMessages(state, receiver);
-    receiver(state.hostName, methodName, value);
-    return true;
-}
-
-function robotArenaPlatformProbeGetReceiver() {
-    if (typeof SendMessage === 'function') {
-        return function (hostName, methodName, value) {
-            SendMessage(hostName, methodName, value);
-        };
-    }
-
-    var unityInstance = window.unityInstance || window.gameInstance;
-    if (unityInstance && typeof unityInstance.SendMessage === 'function') {
-        return function (hostName, methodName, value) {
-            unityInstance.SendMessage(hostName, methodName, value);
-        };
-    }
-
-    return null;
-}
-
-function robotArenaPlatformProbeFlushPendingMessages(state, receiver) {
-    receiver = receiver || robotArenaPlatformProbeGetReceiver();
-    if (!receiver) {
-        return false;
-    }
-
-    var pendingMessages = state.pendingMessages || [];
-    state.pendingMessages = [];
-    for (var index = 0; index < pendingMessages.length; index += 1) {
-        var pendingMessage = pendingMessages[index];
-        receiver(state.hostName, pendingMessage.methodName, pendingMessage.value);
-    }
-
-    return true;
-}
