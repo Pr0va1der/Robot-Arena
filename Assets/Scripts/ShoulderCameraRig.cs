@@ -42,6 +42,8 @@ public sealed class ShoulderCameraRig : CinemachineExtension
     private CinemachineCollider cameraCollider;
     private float clearanceOffsetVelocity;
     private bool clearanceOffsetInitialized;
+    private float finalClearanceRetraction;
+    private float finalClearanceRetractionVelocity;
     private readonly RaycastHit[] clearanceHits = new RaycastHit[32];
 
     private void Start()
@@ -129,6 +131,12 @@ public sealed class ShoulderCameraRig : CinemachineExtension
         ref CameraState state,
         float deltaTime)
     {
+        if (stage == CinemachineCore.Stage.Finalize)
+        {
+            ApplyFinalClearanceCorrection(ref state, ResolveCurrentShoulderRight(state), deltaTime);
+            return;
+        }
+
         if (stage != CinemachineCore.Stage.Body)
         {
             return;
@@ -170,7 +178,7 @@ public sealed class ShoulderCameraRig : CinemachineExtension
 
     private bool IsCameraPathBlocked(CameraState state, Vector3 shoulderRight, float offset)
     {
-        if (clearanceRadius <= 0f || freeLook == null)
+        if (freeLook == null)
         {
             return false;
         }
@@ -181,10 +189,20 @@ public sealed class ShoulderCameraRig : CinemachineExtension
             return false;
         }
 
-        Vector3 cameraPosition = state.RawPosition + shoulderRight * offset;
+        Vector3 cameraPosition = state.FinalPosition + shoulderRight * offset;
         if ((cameraPosition - target.position).sqrMagnitude <= 0.00000001f)
         {
             return false;
+        }
+
+        return IsCameraPositionBlocked(cameraPosition);
+    }
+
+    private bool IsCameraPositionBlocked(Vector3 cameraPosition)
+    {
+        if (clearanceRadius <= 0f)
+        {
+            return IsLaserSelfOccluded(cameraPosition);
         }
 
         float radius = clearanceRadius + Mathf.Max(0f, clearanceMargin);
@@ -205,6 +223,65 @@ public sealed class ShoulderCameraRig : CinemachineExtension
         return false;
     }
 
+    private void ApplyFinalClearanceCorrection(
+        ref CameraState state,
+        Vector3 shoulderRight,
+        float deltaTime)
+    {
+        float targetRetraction = ResolveFinalClearanceRetraction(state, shoulderRight);
+        float elapsed = deltaTime > 0f ? deltaTime : Time.deltaTime;
+        if (elapsed <= 0f)
+        {
+            elapsed = 1f / 60f;
+        }
+
+        finalClearanceRetraction = Mathf.SmoothDamp(
+            finalClearanceRetraction,
+            targetRetraction,
+            ref finalClearanceRetractionVelocity,
+            Mathf.Max(0f, clearanceSmoothTime),
+            Mathf.Infinity,
+            elapsed);
+        state.PositionCorrection -= shoulderRight * finalClearanceRetraction;
+    }
+
+    private float ResolveFinalClearanceRetraction(CameraState state, Vector3 shoulderRight)
+    {
+        if (!IsLaserSelfOccluded(state.FinalPosition))
+        {
+            return 0f;
+        }
+
+        float maximumRetraction = Mathf.Max(0f, ResolvedShoulderOffset);
+        if (maximumRetraction <= 0f)
+        {
+            return 0f;
+        }
+
+        Vector3 retractedPosition = state.FinalPosition - shoulderRight * maximumRetraction;
+        if (IsLaserSelfOccluded(retractedPosition))
+        {
+            return maximumRetraction;
+        }
+
+        float blockedRetraction = 0f;
+        float clearRetraction = maximumRetraction;
+        for (int i = 0; i < 8; i++)
+        {
+            float candidate = (blockedRetraction + clearRetraction) * 0.5f;
+            if (IsLaserSelfOccluded(state.FinalPosition - shoulderRight * candidate))
+            {
+                blockedRetraction = candidate;
+            }
+            else
+            {
+                clearRetraction = candidate;
+            }
+        }
+
+        return clearRetraction;
+    }
+
     private bool IsLaserSelfOccluded(Vector3 cameraPosition)
     {
         if (laserPointer == null || laserPointer.AimTarget == default)
@@ -213,7 +290,7 @@ public sealed class ShoulderCameraRig : CinemachineExtension
         }
 
         Vector3 visibleStart = laserPointer.VisualStart;
-        Vector3 visibleEnd = laserPointer.AimTarget;
+        Vector3 visibleEnd = laserPointer.VisualEnd;
         return HasOwnedColliderBetween(cameraPosition, visibleStart) ||
                HasOwnedColliderBetween(cameraPosition, Vector3.Lerp(visibleStart, visibleEnd, 0.5f)) ||
                HasOwnedColliderBetween(cameraPosition, visibleEnd);

@@ -21,6 +21,7 @@ public class LaserPointer : MonoBehaviour
     public Vector3 AimTarget { get; private set; }
     public Vector3 AimDirection { get; private set; }
     public Vector3 VisualStart { get; private set; }
+    public Vector3 VisualEnd { get; private set; }
     public bool HasHit { get; private set; }
 
     private LineRenderer lineRenderer;
@@ -79,6 +80,7 @@ public class LaserPointer : MonoBehaviour
             AimTarget = default;
             AimDirection = default;
             VisualStart = default;
+            VisualEnd = default;
             HasHit = false;
             return false;
         }
@@ -97,7 +99,8 @@ public class LaserPointer : MonoBehaviour
 
         Vector3 visualStart = ResolveVisualStart(ray, distance, HasHit ? hit.distance : distance);
         VisualStart = visualStart;
-        AimTarget = HasHit
+        AimTarget = physicalTarget;
+        VisualEnd = HasHit
             ? physicalTarget
             : visualStart + AimDirection * distance;
 
@@ -105,7 +108,7 @@ public class LaserPointer : MonoBehaviour
         if (lineRenderer != null)
         {
             lineRenderer.SetPosition(0, visualStart);
-            lineRenderer.SetPosition(1, AimTarget);
+            lineRenderer.SetPosition(1, VisualEnd);
         }
 
         if (laserDot != null)
@@ -181,10 +184,18 @@ public class LaserPointer : MonoBehaviour
         Vector3 visualStart = visualEmissionPoint != null
             ? visualEmissionPoint.position
             : aimRay.origin;
-        float visualDistance = Mathf.Clamp(
+        float configuredVisualDistance = Mathf.Clamp(
             Vector3.Dot(visualStart - aimRay.origin, aimRay.direction),
             0f,
-            Mathf.Min(maxAimDistance, targetDistance));
+            maxAimDistance);
+        if (targetDistance < configuredVisualDistance - 0.0001f)
+        {
+            // An external blocker before the configured emission point must not
+            // leave a beam segment drawn through the blocker.
+            return aimRay.origin + aimRay.direction * targetDistance;
+        }
+
+        float visualDistance = Mathf.Min(configuredVisualDistance, targetDistance);
         float inspectionDistance = visualEmissionPoint != null
             ? visualDistance
             : Mathf.Min(maxAimDistance, targetDistance);

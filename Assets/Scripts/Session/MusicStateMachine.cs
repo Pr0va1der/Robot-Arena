@@ -21,7 +21,7 @@ namespace RobotArena.Session
 
         public void StartCalm()
         {
-            if (AudioPermissionGranted && !terminal && !combatPresence && Mode == MusicMode.Calm)
+            if (AudioPermissionGranted && !terminal && Mode == MusicMode.Calm)
             {
                 return;
             }

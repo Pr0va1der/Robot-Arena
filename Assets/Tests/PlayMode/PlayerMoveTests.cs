@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
@@ -9,12 +10,30 @@ namespace RobotArena.Session.Tests
 {
     public sealed class PlayerMoveTests
     {
+        private readonly List<GameObject> createdObjects = new List<GameObject>();
+
+        [UnityTearDown]
+        public IEnumerator DestroyCreatedObjects()
+        {
+            for (int i = 0; i < createdObjects.Count; i++)
+            {
+                if (createdObjects[i] != null)
+                {
+                    UnityEngine.Object.Destroy(createdObjects[i]);
+                }
+            }
+
+            createdObjects.Clear();
+            yield return null;
+        }
+
         [UnityTest]
         public IEnumerator Jump_uses_velocity_change_instead_of_rigidbody_mass()
         {
             float previousTimeScale = Time.timeScale;
             Time.timeScale = 1f;
             GameObject ground = new GameObject("Ground");
+            createdObjects.Add(ground);
             GameObject lightPlayer = null;
             GameObject heavyPlayer = null;
 
@@ -26,6 +45,8 @@ namespace RobotArena.Session.Tests
 
                 lightPlayer = CreatePlayer("LightPlayer", 998f, 1f);
                 heavyPlayer = CreatePlayer("HeavyPlayer", 1002f, 1000f);
+                createdObjects.Add(lightPlayer);
+                createdObjects.Add(heavyPlayer);
 
                 yield return null;
 
@@ -55,9 +76,6 @@ namespace RobotArena.Session.Tests
             }
             finally
             {
-                UnityEngine.Object.Destroy(ground);
-                UnityEngine.Object.Destroy(lightPlayer);
-                UnityEngine.Object.Destroy(heavyPlayer);
                 Time.timeScale = previousTimeScale;
             }
         }

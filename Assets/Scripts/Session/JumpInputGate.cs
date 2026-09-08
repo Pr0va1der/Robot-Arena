@@ -6,13 +6,36 @@ namespace RobotArena.Session
     public sealed class JumpInputGate
     {
         private bool wasHeld;
+        private bool pendingPress;
 
-        public bool Consume(bool isHeld, bool isPaused)
+        public void Sample(bool isHeld, bool isPaused)
         {
             bool wasPressed = isHeld && !wasHeld;
             wasHeld = isHeld;
 
-            return !isPaused && wasPressed;
+            if (isPaused)
+            {
+                pendingPress = false;
+                return;
+            }
+
+            if (wasPressed)
+            {
+                pendingPress = true;
+            }
+        }
+
+        public bool Consume()
+        {
+            bool wasPressed = pendingPress;
+            pendingPress = false;
+            return wasPressed;
+        }
+
+        public bool Consume(bool isHeld, bool isPaused)
+        {
+            Sample(isHeld, isPaused);
+            return Consume();
         }
     }
 }

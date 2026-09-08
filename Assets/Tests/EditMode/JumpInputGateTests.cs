@@ -26,5 +26,25 @@ namespace RobotArena.Session.Tests
             Assert.That(gate.Consume(false, false), Is.False);
             Assert.That(gate.Consume(true, false), Is.True);
         }
+
+        [Test]
+        public void Sampling_during_pause_discards_pending_press_until_a_fresh_press()
+        {
+            var gate = new JumpInputGate();
+
+            gate.Sample(false, false);
+            gate.Sample(true, false);
+            Assert.That(gate.Consume(), Is.True);
+
+            gate.Sample(false, false);
+            gate.Sample(true, true);
+            Assert.That(gate.Consume(), Is.False);
+            gate.Sample(true, false);
+            Assert.That(gate.Consume(), Is.False);
+
+            gate.Sample(false, false);
+            gate.Sample(true, false);
+            Assert.That(gate.Consume(), Is.True);
+        }
     }
 }

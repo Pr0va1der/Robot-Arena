@@ -82,6 +82,27 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
+        public void Repeated_calm_start_does_not_restart_intro_during_combat()
+        {
+            var stateMachine = new MusicStateMachine();
+            int calmIntroCount = 0;
+            stateMachine.CueRequested += cue =>
+            {
+                if (cue == MusicCue.CalmIntro)
+                {
+                    calmIntroCount++;
+                }
+            };
+
+            stateMachine.RegisterAudioGesture();
+            stateMachine.SetCombatPresence(true);
+            stateMachine.StartCalm();
+
+            Assert.That(calmIntroCount, Is.EqualTo(1));
+            Assert.That(stateMachine.IsCalmIntroPlaying, Is.True);
+        }
+
+        [Test]
         public void Combat_presence_waits_for_the_first_calm_intro_to_complete()
         {
             var stateMachine = new MusicStateMachine();

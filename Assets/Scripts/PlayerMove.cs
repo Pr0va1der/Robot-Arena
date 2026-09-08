@@ -33,12 +33,17 @@ public class PlayerMove : MonoBehaviour
             cameraTransform = Camera.main.transform;
     }
 
+    private void Update()
+    {
+        jumpInputGate.Sample(
+            GameplayInputActions.Current.JumpHeld,
+            PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed);
+    }
+
     private void FixedUpdate()
     {
+        bool jumpPressed = jumpInputGate.Consume();
         bool isGameplayPaused = PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed;
-        bool jumpPressed = jumpInputGate.Consume(
-            GameplayInputActions.Current.JumpHeld,
-            isGameplayPaused);
 
         if (isGameplayPaused)
         {
