@@ -28,6 +28,11 @@ public class GunRotation : MonoBehaviour
         CinemachineCore.CameraUpdatedEvent.RemoveListener(SynchronizeAfterCameraUpdate);
     }
 
+    private void Update()
+    {
+        SynchronizeTargetPosition();
+    }
+
     private void LateUpdate()
     {
         SynchronizeAim();
@@ -51,10 +56,7 @@ public class GunRotation : MonoBehaviour
 
     private void SynchronizeAim()
     {
-        if (target != null)
-        {
-            transform.position = target.position;
-        }
+        SynchronizeTargetPosition();
 
         if (cameraTransform == null)
         {
@@ -68,5 +70,13 @@ public class GunRotation : MonoBehaviour
             cameraTransform.forward,
             minElevation,
             maxElevation);
+    }
+
+    private void SynchronizeTargetPosition()
+    {
+        if (target != null)
+        {
+            transform.position = target.position;
+        }
     }
 }

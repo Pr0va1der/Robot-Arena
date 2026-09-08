@@ -37,7 +37,6 @@ public sealed class DesktopArenaUi : MonoBehaviour
     private TextMeshProUGUI tutorialDetailsText;
     private TextMeshProUGUI resultTitleText;
     private TextMeshProUGUI resultDetailsText;
-    private DesktopCrosshair crosshair;
     private Button pauseResumeButton;
     private Button tutorialStartButton;
     private Button pauseMenuButton;
@@ -303,21 +302,11 @@ public sealed class DesktopArenaUi : MonoBehaviour
         {
             pointerPrompt.gameObject.SetActive(ShouldShowPointerPrompt());
         }
-
-        if (crosshair != null)
-        {
-            crosshair.SetVisible(ShouldShowCrosshair());
-        }
     }
 
     private bool ShouldShowPointerPrompt()
     {
         return IsGameplayPresentationActive() && pauseMenu.RequiresPointerLockClick;
-    }
-
-    private bool ShouldShowCrosshair()
-    {
-        return IsGameplayPresentationActive() && !pauseMenu.RequiresPointerLockClick;
     }
 
     private bool IsGameplayPresentationActive()
@@ -418,8 +407,6 @@ public sealed class DesktopArenaUi : MonoBehaviour
 
         gameplayPanel = DesktopUiFactory.CreateFullScreenRoot("GameplayUI", safeRoot, false);
         CreateHud(gameplayPanel.transform);
-        crosshair = CreateCrosshair(desktopRoot.transform);
-        crosshair.Bind(Camera.main);
         pointerPrompt = DesktopUiFactory.CreateText(
             "PointerPrompt",
             safeRoot,
@@ -432,36 +419,6 @@ public sealed class DesktopArenaUi : MonoBehaviour
         CreatePausePanel(safeRoot);
         CreateTutorialPanel(safeRoot);
         CreateResultPanel(safeRoot);
-    }
-
-    private static DesktopCrosshair CreateCrosshair(Transform parent)
-    {
-        GameObject root = new GameObject("Crosshair", typeof(RectTransform));
-        root.transform.SetParent(parent, false);
-        RectTransform rootRect = root.GetComponent<RectTransform>();
-        DesktopUiFactory.SetCenter(rootRect, Vector2.zero, new Vector2(32f, 32f));
-
-        CreateCrosshairStroke("Left", root.transform, new Vector2(-10f, 0f), new Vector2(8f, 2f));
-        CreateCrosshairStroke("Right", root.transform, new Vector2(10f, 0f), new Vector2(8f, 2f));
-        CreateCrosshairStroke("Up", root.transform, new Vector2(0f, 10f), new Vector2(2f, 8f));
-        CreateCrosshairStroke("Down", root.transform, new Vector2(0f, -10f), new Vector2(2f, 8f));
-
-        return root.AddComponent<DesktopCrosshair>();
-    }
-
-    private static void CreateCrosshairStroke(
-        string name,
-        Transform parent,
-        Vector2 position,
-        Vector2 size)
-    {
-        GameObject stroke = DesktopUiFactory.CreatePanel(name, parent, Color.white, false);
-        DesktopUiFactory.SetCenter(stroke.GetComponent<RectTransform>(), position, size);
-
-        Outline outline = stroke.AddComponent<Outline>();
-        outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
-        outline.effectDistance = new Vector2(1f, 1f);
-        outline.useGraphicAlpha = true;
     }
 
     private void CreateHud(Transform parent)

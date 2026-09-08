@@ -8,8 +8,8 @@ public class LaserPointer : MonoBehaviour
     public float maxDistance = 100f;
     public LayerMask hitLayers;
     public GameObject laserDotPrefab;
-    // The imported player Armature's barrel points along its local -Y axis.
-    public Vector3 localAimAxis = Vector3.down;
+    // The imported player Armature's barrel points along its local +Y axis.
+    public Vector3 localAimAxis = Vector3.up;
 
     public Vector3 AimTarget { get; private set; }
     public Vector3 AimDirection { get; private set; }
@@ -73,7 +73,7 @@ public class LaserPointer : MonoBehaviour
 
         Vector3 axis = localAimAxis.sqrMagnitude > 0.0001f
             ? localAimAxis.normalized
-            : Vector3.down;
+            : Vector3.up;
         AimDirection = barrel.TransformDirection(axis).normalized;
         float distance = Mathf.Max(0f, maxDistance);
         Ray ray = new Ray(barrel.position, AimDirection);

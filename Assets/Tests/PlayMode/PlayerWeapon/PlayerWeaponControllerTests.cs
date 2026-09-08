@@ -132,11 +132,16 @@ namespace RobotArena.PlayerWeapon.Tests
                 bulletPrefab.AddComponent<Rigidbody>();
                 createdObjects.Add(bulletPrefab);
 
+                GameObject physicsBody = new GameObject("PhysicsBody");
+                physicsBody.AddComponent<Rigidbody>();
+                createdObjects.Add(physicsBody);
+
                 Component shooting = player.AddComponent(playerShootingType);
                 PlayerWeaponTestReflection.SetField(shooting, "bulletPrefab", bulletPrefab);
                 PlayerWeaponTestReflection.SetField(shooting, "firePointLeft", leftBarrel.transform);
                 PlayerWeaponTestReflection.SetField(shooting, "firePointRight", rightBarrel.transform);
                 PlayerWeaponTestReflection.SetField(shooting, "laserPointer", laserPointer);
+                PlayerWeaponTestReflection.SetField(shooting, "physicsBody", physicsBody);
                 PlayerWeaponTestReflection.SetField(shooting, "shootForce", 10f);
 
                 MethodInfo tryFireVolley = playerShootingType.GetMethod(

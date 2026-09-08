@@ -26,7 +26,7 @@ public sealed class StableCameraTarget : MonoBehaviour
     /// <summary>
     /// Applies the current chassis position immediately.
     ///
-    /// Movement normally reaches this component through LateUpdate. Teleports
+    /// Movement normally reaches this component through Update. Teleports
     /// and respawns call this method at their write site so the camera support
     /// point has no rendered-frame catch-up.
     /// </summary>
@@ -41,7 +41,7 @@ public sealed class StableCameraTarget : MonoBehaviour
         transform.rotation = Quaternion.identity;
     }
 
-    private void LateUpdate()
+    private void Update()
     {
         SnapToFollowTarget();
     }

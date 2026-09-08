@@ -10,6 +10,12 @@ namespace RobotArena.PlayerWeapon.Tests
 {
     public sealed class GunRotationTests
     {
+        private const float ExpectedSampleSceneShoulderOffset = 2f;
+        private const float ExpectedSampleSceneTargetScreenX = 0.15f;
+        private const float ExpectedSampleSceneUpperWorldElevation = 43f;
+        private const float ExpectedSampleSceneLowerWorldElevation = -43f;
+        private const float ExpectedSampleScenePostOrbitScreenXTolerance = 0.1f;
+
         private Scene integrationScene;
         private Scene previousActiveScene;
         private bool integrationSceneLoadedByTest;
@@ -141,11 +147,19 @@ namespace RobotArena.PlayerWeapon.Tests
                 yield return WaitForSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer);
 
                 SetCinemachineYAxisValue(freeLook, 0f);
-                yield return WaitForWorldElevation(sceneCamera, lookAt, 45f, "upper elevation limit");
+                yield return WaitForWorldElevation(
+                    sceneCamera,
+                    lookAt,
+                    ExpectedSampleSceneUpperWorldElevation,
+                    "upper elevation limit");
                 yield return WaitForSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer);
 
                 SetCinemachineYAxisValue(freeLook, 1f);
-                yield return WaitForWorldElevation(sceneCamera, lookAt, -45f, "lower elevation limit");
+                yield return WaitForWorldElevation(
+                    sceneCamera,
+                    lookAt,
+                    ExpectedSampleSceneLowerWorldElevation,
+                    "lower elevation limit");
                 yield return WaitForSceneAimDirectionsMatch(sceneCamera, gunRotation, laserPointer);
             }
             finally
@@ -311,7 +325,7 @@ namespace RobotArena.PlayerWeapon.Tests
             Transform lookAt = lookAtProperty.GetValue(freeLook, null) as Transform;
             Assert.That(lookAt, Is.Not.Null);
 
-            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f);
+            AssertLookAtScreenX(sceneCamera, lookAt, ExpectedSampleSceneTargetScreenX);
 
             Vector3 cameraToLookAt = (lookAt.position - sceneCamera.transform.position).normalized;
             Assert.That(
@@ -319,8 +333,12 @@ namespace RobotArena.PlayerWeapon.Tests
                 Is.LessThan(-0.02f),
                 "The look-at target should remain left of the camera in the right-shoulder composition.");
 
-            Assert.That(GetFloatField(shoulderCameraRig, "shoulderOffset"), Is.EqualTo(0.75f).Within(0.001f));
-            Assert.That(GetFloatField(shoulderCameraRig, "targetScreenX"), Is.EqualTo(0.375f).Within(0.001f));
+            Assert.That(
+                GetFloatField(shoulderCameraRig, "shoulderOffset"),
+                Is.EqualTo(ExpectedSampleSceneShoulderOffset).Within(0.001f));
+            Assert.That(
+                GetFloatField(shoulderCameraRig, "targetScreenX"),
+                Is.EqualTo(ExpectedSampleSceneTargetScreenX).Within(0.001f));
 
             FieldInfo cameraTransformField = gunRotationType.GetField(
                 "cameraTransform",
@@ -333,7 +351,11 @@ namespace RobotArena.PlayerWeapon.Tests
             SetCinemachineYAxisValue(freeLook, 0.9f);
             yield return new WaitForSecondsRealtime(0.25f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
-            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f, 0.05f);
+            AssertLookAtScreenX(
+                sceneCamera,
+                lookAt,
+                ExpectedSampleSceneTargetScreenX,
+                ExpectedSampleScenePostOrbitScreenXTolerance);
 
             Vector3 upperCameraDirection = sceneCamera.transform.forward;
             Vector3 upperAimDirection = GetAimDirection(laserPointer);
@@ -343,7 +365,11 @@ namespace RobotArena.PlayerWeapon.Tests
             SetCinemachineYAxisValue(freeLook, 0.1f);
             yield return new WaitForSecondsRealtime(0.25f);
             yield return WaitForAimToFollowCamera(sceneCamera, laserPointer);
-            AssertLookAtScreenX(sceneCamera, lookAt, 0.375f, 0.05f);
+            AssertLookAtScreenX(
+                sceneCamera,
+                lookAt,
+                ExpectedSampleSceneTargetScreenX,
+                ExpectedSampleScenePostOrbitScreenXTolerance);
 
             Vector3 lowerCameraDirection = sceneCamera.transform.forward;
             Vector3 lowerAimDirection = GetAimDirection(laserPointer);
