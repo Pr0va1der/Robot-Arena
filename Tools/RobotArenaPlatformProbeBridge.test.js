@@ -125,6 +125,17 @@ test('treats a missing or malformed leaderboard object as unavailable', async ()
   assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.supportsLeaderboard, false);
 });
 
+test('treats an absent leaderboard property as unavailable', async () => {
+  const harness = createHarness();
+  delete harness.context.window.ysdk.leaderboards;
+
+  harness.begin('RobotArenaPlatformProbe', 1000);
+  await flushMicrotasks();
+
+  assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.sdkInitialized, true);
+  assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.supportsLeaderboard, false);
+});
+
 test('buffers SDK snapshot until Unity receiver exists and flushes it', async () => {
   const harness = createHarness();
 
