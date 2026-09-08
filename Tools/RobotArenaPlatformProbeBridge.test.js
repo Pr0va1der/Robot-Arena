@@ -8,7 +8,11 @@ const bridgeSource = fs.readFileSync(
   path.join(__dirname, '..', 'Assets', 'Plugins', 'WebGL', 'RobotArenaPlatformProbe.jslib'),
   'utf8');
 
-function createHarness(readyImplementation = null) {
+function createHarness(
+  readyImplementation = null,
+  leaderboardApi = { getEntries() {} },
+  legacyLeaderboard = null,
+) {
   const calls = [];
   let readyCalls = 0;
   const sdk = {
@@ -28,8 +32,11 @@ function createHarness(readyImplementation = null) {
     },
     on() {},
     getPlayer() {},
-    getLeaderboards() {}
+    leaderboards: leaderboardApi
   };
+  if (legacyLeaderboard) {
+    sdk.getLeaderboards = legacyLeaderboard;
+  }
   const context = {
     LibraryManager: { library: {} },
     mergeInto(target, source) {
@@ -70,6 +77,53 @@ function createHarness(readyImplementation = null) {
 function flushMicrotasks() {
   return new Promise(resolve => setImmediate(resolve));
 }
+
+test('reports modern leaderboard support without invoking the legacy initializer or a read', async () => {
+  let legacyCalls = 0;
+  let readCalls = 0;
+  const harness = createHarness(
+    null,
+    {
+      getEntries() {
+        readCalls += 1;
+      }
+    },
+    () => {
+      legacyCalls += 1;
+      throw new Error('legacy leaderboard API must not be called');
+    });
+
+  harness.begin('RobotArenaPlatformProbe', 1000);
+  await flushMicrotasks();
+
+  assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.supportsLeaderboard, true);
+  assert.equal(legacyCalls, 0);
+  assert.equal(readCalls, 0);
+});
+
+test('does not treat the deprecated legacy leaderboard API as supported', async () => {
+  let legacyCalls = 0;
+  const harness = createHarness(null, null, () => {
+    legacyCalls += 1;
+    throw new Error('legacy leaderboard API must not be called');
+  });
+
+  harness.begin('RobotArenaPlatformProbe', 1000);
+  await flushMicrotasks();
+
+  assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.supportsLeaderboard, false);
+  assert.equal(legacyCalls, 0);
+});
+
+test('treats a missing or malformed leaderboard object as unavailable', async () => {
+  const harness = createHarness(null, {});
+
+  harness.begin('RobotArenaPlatformProbe', 1000);
+  await flushMicrotasks();
+
+  assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.sdkInitialized, true);
+  assert.equal(harness.context.window.__robotArenaPlatformProbe.snapshot.supportsLeaderboard, false);
+});
 
 test('buffers SDK snapshot until Unity receiver exists and flushes it', async () => {
   const harness = createHarness();

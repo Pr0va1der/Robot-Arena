@@ -112,6 +112,7 @@ mergeInto(LibraryManager.library, {
                 var loadingApi = features.LoadingAPI || null;
                 var environment = sdk && sdk.environment ? sdk.environment : {};
                 var i18n = environment.i18n || {};
+                var leaderboards = sdk && sdk.leaderboards ? sdk.leaderboards : null;
                 var snapshot = {
                     sdkDetected: !!sdk,
                     sdkInitialized: !!sdk,
@@ -120,7 +121,7 @@ mergeInto(LibraryManager.library, {
                     hasLoadingApi: !!(loadingApi && typeof loadingApi.ready === 'function'),
                     supportsPause: !!(sdk && typeof sdk.on === 'function'),
                     supportsPlayerData: !!(sdk && typeof sdk.getPlayer === 'function'),
-                    supportsLeaderboard: !!(sdk && typeof sdk.getLeaderboards === 'function'),
+                    supportsLeaderboard: !!(leaderboards && typeof leaderboards.getEntries === 'function'),
                     supportsFullscreenAds: !!(sdk && sdk.adv && typeof sdk.adv.showFullscreenAdv === 'function'),
                     gameReady: false,
                     timedOut: false,
@@ -164,25 +165,10 @@ mergeInto(LibraryManager.library, {
                     }
                 }
 
-                if (sdk && typeof sdk.getLeaderboards === 'function') {
-                    try {
-                        var leaderboardRequest = sdk.getLeaderboards();
-                        if (leaderboardRequest && typeof leaderboardRequest.then === 'function') {
-                            leaderboardRequest.then(function () {
-                                if (typeof console !== 'undefined' && typeof console.info === 'function') {
-                                    console.info('RobotArena platform probe leaderboard boundary is callable.');
-                                }
-                            }, function (leaderboardError) {
-                                if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-                                    console.warn('RobotArena platform probe leaderboard boundary failed.', leaderboardError);
-                                }
-                            });
-                        }
-                    } catch (leaderboardError) {
-                        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-                            console.warn('RobotArena platform probe leaderboard boundary failed.', leaderboardError);
-                        }
-                    }
+                if (snapshot.supportsLeaderboard &&
+                    typeof console !== 'undefined' &&
+                    typeof console.info === 'function') {
+                    console.info('RobotArena platform probe leaderboard boundary is available.');
                 }
             }).catch(function (error) {
                 if (state.finished) {
