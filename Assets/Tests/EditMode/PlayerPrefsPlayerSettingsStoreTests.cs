@@ -29,6 +29,7 @@ namespace RobotArena.Session.Tests
             PlayerSettings settings = store.Load();
 
             Assert.That(settings, Is.EqualTo(PlayerSettings.CreateDefaults(GameLanguage.English)));
+            Assert.That(settings.MusicVolume, Is.EqualTo(0.35f));
         }
 
         [Test]
@@ -47,6 +48,22 @@ namespace RobotArena.Session.Tests
             var reloadedStore = new PlayerPrefsPlayerSettingsStore(TestKeyPrefix, GameLanguage.English);
 
             Assert.That(reloadedStore.Load(), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Explicit_maximum_music_volume_is_preserved()
+        {
+            PlayerSettings expected = new PlayerSettings(
+                GameLanguage.English,
+                1f,
+                1f,
+                1f,
+                false,
+                GraphicsQualityProfile.Performance);
+
+            store.Save(expected);
+
+            Assert.That(store.Load().MusicVolume, Is.EqualTo(1f));
         }
 
         [Test]
@@ -85,7 +102,7 @@ namespace RobotArena.Session.Tests
 
             Assert.That(migrated.Language, Is.EqualTo(GameLanguage.Russian));
             Assert.That(migrated.MasterVolume, Is.EqualTo(0.5f));
-            Assert.That(migrated.MusicVolume, Is.EqualTo(1f));
+            Assert.That(migrated.MusicVolume, Is.EqualTo(0.35f));
             Assert.That(migrated.SfxVolume, Is.EqualTo(1f));
             Assert.That(migrated.IsMuted, Is.False);
             Assert.That(migrated.GraphicsProfile, Is.EqualTo(GraphicsQualityProfile.Performance));

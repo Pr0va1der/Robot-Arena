@@ -1,8 +1,10 @@
+using RobotArena.PlayerWeapon;
 using Cinemachine;
 using UnityEngine;
 
 /// <summary>
-/// Configures the gameplay FreeLook camera for a fixed, right-shoulder composition.
+/// Configures the gameplay FreeLook camera for a right-shoulder composition with
+/// bounded clearance correction against the player and visible line of fire.
 /// </summary>
 [DefaultExecutionOrder(-1000)]
 [RequireComponent(typeof(CinemachineFreeLook))]
@@ -19,8 +21,28 @@ public sealed class ShoulderCameraRig : CinemachineExtension
     [Min(0f)]
     public float minimumDistanceFromTarget = 0.6f;
 
+    [Header("Adaptive clearance")]
+    [Min(0f)]
+    public float clearanceRadius = 0.2f;
+
+    [Min(0f)]
+    public float clearanceMargin = 0.05f;
+
+    [Min(0f)]
+    public float clearanceSmoothTime = 0.08f;
+
+    public LayerMask clearanceLayers = ~0;
+    public Transform clearanceTarget;
+    public Transform clearanceOwnerRoot;
+    public LaserPointer laserPointer;
+
+    public float ResolvedShoulderOffset { get; private set; }
+
     private CinemachineFreeLook freeLook;
     private CinemachineCollider cameraCollider;
+    private float clearanceOffsetVelocity;
+    private bool clearanceOffsetInitialized;
+    private readonly RaycastHit[] clearanceHits = new RaycastHit[32];
 
     private void Start()
     {
@@ -40,6 +62,16 @@ public sealed class ShoulderCameraRig : CinemachineExtension
         if (cameraCollider != null)
         {
             cameraCollider.m_MinimumDistanceFromTarget = Mathf.Max(0f, minimumDistanceFromTarget);
+        }
+
+        if (clearanceLayers.value == 0)
+        {
+            clearanceLayers = ~0;
+        }
+
+        if (laserPointer == null)
+        {
+            laserPointer = FindObjectOfType<LaserPointer>();
         }
 
         ReorderExtensionsForCollision();
@@ -107,7 +139,124 @@ public sealed class ShoulderCameraRig : CinemachineExtension
         // composing a shifted proxy point. Use the current orbit geometry rather
         // than the rig transform, which still contains the previous frame's aim.
         Vector3 shoulderRight = ResolveCurrentShoulderRight(state);
-        state.PositionCorrection += shoulderRight * Mathf.Max(0f, shoulderOffset);
+        CameraState clearanceState = state;
+        float safeOffsetTarget = PlayerWeaponAim.ResolveSafeShoulderOffset(
+            shoulderOffset,
+            offset => IsCameraPathBlocked(clearanceState, shoulderRight, offset));
+        if (!clearanceOffsetInitialized)
+        {
+            ResolvedShoulderOffset = safeOffsetTarget;
+            clearanceOffsetInitialized = true;
+        }
+        else
+        {
+            float elapsed = deltaTime > 0f ? deltaTime : Time.deltaTime;
+            if (elapsed <= 0f)
+            {
+                elapsed = 1f / 60f;
+            }
+
+            ResolvedShoulderOffset = Mathf.SmoothDamp(
+                ResolvedShoulderOffset,
+                safeOffsetTarget,
+                ref clearanceOffsetVelocity,
+                Mathf.Max(0f, clearanceSmoothTime),
+                Mathf.Infinity,
+                elapsed);
+        }
+
+        state.PositionCorrection += shoulderRight * ResolvedShoulderOffset;
+    }
+
+    private bool IsCameraPathBlocked(CameraState state, Vector3 shoulderRight, float offset)
+    {
+        if (clearanceRadius <= 0f || freeLook == null)
+        {
+            return false;
+        }
+
+        Transform target = clearanceTarget != null ? clearanceTarget : freeLook.LookAt;
+        if (target == null)
+        {
+            return false;
+        }
+
+        Vector3 cameraPosition = state.RawPosition + shoulderRight * offset;
+        if ((cameraPosition - target.position).sqrMagnitude <= 0.00000001f)
+        {
+            return false;
+        }
+
+        float radius = clearanceRadius + Mathf.Max(0f, clearanceMargin);
+        if (Physics.CheckSphere(
+                cameraPosition,
+                radius,
+                clearanceLayers,
+                QueryTriggerInteraction.Ignore))
+        {
+            return true;
+        }
+
+        if (IsLaserSelfOccluded(cameraPosition))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsLaserSelfOccluded(Vector3 cameraPosition)
+    {
+        if (laserPointer == null || laserPointer.AimTarget == default)
+        {
+            return false;
+        }
+
+        Vector3 visibleStart = laserPointer.VisualStart;
+        Vector3 visibleEnd = laserPointer.AimTarget;
+        return HasOwnedColliderBetween(cameraPosition, visibleStart) ||
+               HasOwnedColliderBetween(cameraPosition, Vector3.Lerp(visibleStart, visibleEnd, 0.5f)) ||
+               HasOwnedColliderBetween(cameraPosition, visibleEnd);
+    }
+
+    private bool HasOwnedColliderBetween(Vector3 origin, Vector3 destination)
+    {
+        Vector3 toDestination = destination - origin;
+        float distance = toDestination.magnitude;
+        if (distance <= 0.0001f)
+        {
+            return false;
+        }
+
+        int hitCount = Physics.RaycastNonAlloc(
+            origin,
+            toDestination / distance,
+            clearanceHits,
+            distance,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < hitCount; i++)
+        {
+            if (IsOwnedCollider(clearanceHits[i].collider, clearanceTarget))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsOwnedCollider(Collider candidate, Transform fallbackTarget)
+    {
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        Transform root = clearanceOwnerRoot != null
+            ? clearanceOwnerRoot
+            : fallbackTarget;
+        return root != null && (candidate.transform == root || candidate.transform.IsChildOf(root));
     }
 
     private static Vector3 ResolveCurrentShoulderRight(CameraState state)

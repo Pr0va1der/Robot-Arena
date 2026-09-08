@@ -1,4 +1,6 @@
+using RobotArena.Session;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerMove : MonoBehaviour
@@ -6,7 +8,9 @@ public class PlayerMove : MonoBehaviour
     [Header("Movement Settings")]
     public float Speed = 10f;
     public float BrakeForce = 8f;
-    public float JumpForce = 150f;
+    [FormerlySerializedAs("JumpForce")]
+    [Min(0f)]
+    public float JumpSpeed = 8f;
 
     [Header("Camera")]
     public Transform cameraTransform;
@@ -14,6 +18,10 @@ public class PlayerMove : MonoBehaviour
     private bool _isGrounded;
     private float groundedTimer = 0f;
     private Rigidbody _rb;
+    private readonly JumpInputGate jumpInputGate = new JumpInputGate();
+
+    [Range(0f, 1f)]
+    public float GroundedNormalThreshold = 0.5f;
 
     private void Start()
     {
@@ -27,7 +35,12 @@ public class PlayerMove : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed)
+        bool isGameplayPaused = PauseMenu.GameIsPaused || PauseMenu.PointerLockGestureConsumed;
+        bool jumpPressed = jumpInputGate.Consume(
+            GameplayInputActions.Current.JumpHeld,
+            isGameplayPaused);
+
+        if (isGameplayPaused)
         {
             return;
         }
@@ -36,7 +49,10 @@ public class PlayerMove : MonoBehaviour
         _isGrounded = groundedTimer > 0f;
 
         MovementLogic();
-        JumpLogic();
+        if (jumpPressed)
+        {
+            TryJump();
+        }
     }
 
     private void MovementLogic()
@@ -72,17 +88,45 @@ public class PlayerMove : MonoBehaviour
         }
     }
 
-    private void JumpLogic()
+    public bool TryJump()
     {
-        if (GameplayInputActions.Current.JumpHeld && _isGrounded)
+        if (!_isGrounded || JumpSpeed <= 0f)
         {
-            _rb.AddForce(Vector3.up * JumpForce);
+            return false;
         }
+
+        if (_rb == null)
+        {
+            _rb = GetComponent<Rigidbody>();
+        }
+
+        Vector3 velocity = _rb.velocity;
+        if (velocity.y >= JumpSpeed)
+        {
+            return false;
+        }
+
+        velocity.y = JumpSpeed;
+        _rb.velocity = velocity;
+        groundedTimer = 0f;
+        _isGrounded = false;
+        return true;
     }
 
     private void OnCollisionStay(Collision collision)
     {
-        if (collision.gameObject.CompareTag("Ground"))
-            groundedTimer = 0.1f;
+        if (!collision.gameObject.CompareTag("Ground"))
+        {
+            return;
+        }
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            if (Vector3.Dot(collision.GetContact(i).normal, Vector3.up) >= GroundedNormalThreshold)
+            {
+                groundedTimer = 0.1f;
+                return;
+            }
+        }
     }
 }

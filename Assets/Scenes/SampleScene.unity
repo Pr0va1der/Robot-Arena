@@ -10558,7 +10558,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Speed: 10
   BrakeForce: 2
-  JumpForce: 50
+  JumpSpeed: 8
   cameraTransform: {fileID: 419118570}
 --- !u!54 &830364043
 Rigidbody:
@@ -18459,6 +18459,15 @@ MonoBehaviour:
   shoulderOffset: 2
   targetScreenX: 0.15
   minimumDistanceFromTarget: 0.6
+  clearanceRadius: 0.2
+  clearanceMargin: 0.05
+  clearanceSmoothTime: 0.08
+  clearanceLayers:
+    serializedVersion: 2
+    m_Bits: 1
+  clearanceTarget: {fileID: 830364046}
+  clearanceOwnerRoot: {fileID: 830364046}
+  laserPointer: {fileID: 2082693416}
 --- !u!4 &1350462373 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4665457337495089461, guid: 67be6e1e1c2d427459ec3df0e0ebb722, type: 3}
@@ -29579,6 +29588,9 @@ MonoBehaviour:
     m_Bits: 4294967295
   laserDotPrefab: {fileID: 2486361104094463660, guid: 8d037b33b848b3e419aaacc805ff487f, type: 3}
   localAimAxis: {x: 0, y: 1, z: 0}
+  visualEmissionPoint: {fileID: 2082693415}
+  ownerRoot: {fileID: 0}
+  visualClearance: 0.02
 --- !u!120 &2082693417
 LineRenderer:
   serializedVersion: 2

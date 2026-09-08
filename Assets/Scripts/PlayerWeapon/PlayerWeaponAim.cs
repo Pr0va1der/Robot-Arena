@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace RobotArena.PlayerWeapon
@@ -57,6 +58,46 @@ namespace RobotArena.PlayerWeapon
             }
 
             return Mathf.Clamp(elevation, minElevation, maxElevation);
+        }
+
+        /// <summary>
+        /// Finds the largest shoulder offset whose camera path is not obstructed.
+        /// The probe is supplied by the camera integration so this policy remains
+        /// deterministic and independent from Unity physics in unit tests.
+        /// </summary>
+        public static float ResolveSafeShoulderOffset(
+            float requestedOffset,
+            Func<float, bool> isBlocked,
+            int iterations = 8)
+        {
+            float requested = Mathf.Max(0f, requestedOffset);
+            if (requested <= 0f || isBlocked == null || !isBlocked(requested))
+            {
+                return requested;
+            }
+
+            if (isBlocked(0f))
+            {
+                return 0f;
+            }
+
+            float clearOffset = 0f;
+            float blockedOffset = requested;
+            int searchIterations = Mathf.Max(1, iterations);
+            for (int i = 0; i < searchIterations; i++)
+            {
+                float candidate = (clearOffset + blockedOffset) * 0.5f;
+                if (isBlocked(candidate))
+                {
+                    blockedOffset = candidate;
+                }
+                else
+                {
+                    clearOffset = candidate;
+                }
+            }
+
+            return clearOffset;
         }
     }
 }

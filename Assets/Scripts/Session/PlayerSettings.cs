@@ -53,7 +53,7 @@ namespace RobotArena.Session
             return new PlayerSettings(
                 language,
                 1f,
-                1f,
+                0.35f,
                 1f,
                 false,
                 GraphicsQualityProfile.Performance);

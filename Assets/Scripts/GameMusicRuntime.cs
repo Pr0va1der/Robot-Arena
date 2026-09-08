@@ -50,6 +50,14 @@ public sealed class GameMusicRuntime : MonoBehaviour
             return Instance;
         }
 
+        // A scene-authored runtime may be discovered before its Awake callback
+        // has populated Instance. Reuse it instead of creating a second owner.
+        GameMusicRuntime existing = FindObjectOfType<GameMusicRuntime>();
+        if (existing != null)
+        {
+            return existing;
+        }
+
         GameObject runtimeObject = new GameObject("GameMusicRuntime");
         return runtimeObject.AddComponent<GameMusicRuntime>();
     }
