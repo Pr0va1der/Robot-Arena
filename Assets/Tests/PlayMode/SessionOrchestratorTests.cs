@@ -4,12 +4,39 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
 namespace RobotArena.Session.Tests
 {
     public class SessionOrchestratorTests
     {
+        private Scene previousActiveScene;
+        private Scene isolationScene;
+
+        [UnitySetUp]
+        public IEnumerator CreateIsolationScene()
+        {
+            previousActiveScene = SceneManager.GetActiveScene();
+            isolationScene = SceneManager.CreateScene("SessionOrchestratorTests");
+            SceneManager.SetActiveScene(isolationScene);
+            yield return null;
+        }
+
+        [UnityTearDown]
+        public IEnumerator RestorePreviousScene()
+        {
+            if (previousActiveScene.IsValid() && previousActiveScene.isLoaded)
+            {
+                SceneManager.SetActiveScene(previousActiveScene);
+            }
+
+            if (isolationScene.IsValid() && isolationScene.isLoaded)
+            {
+                yield return SceneManager.UnloadSceneAsync(isolationScene);
+            }
+        }
+
         [Test]
         public void Session_wins_after_four_cleared_waves_with_three_full_intermissions()
         {
