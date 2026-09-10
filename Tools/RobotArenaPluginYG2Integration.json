@@ -2,6 +2,7 @@
   "plugin": "PluginYG2",
   "pluginVersion": "v2.0092",
   "sourceArchiveSha256": "8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3",
+  "vendoredFingerprint": "AB4551EFDB23E1DC417598F406AF2997F16080BBBCF8E9FB08CDFAFF9763395F",
   "versionFile": "Assets/PluginYourGames/Version.txt",
   "templateFile": "Assets/WebGLTemplates/RobotArenaPluginYG2/index.html",
   "platform": "YandexGamesPlatform_yg",

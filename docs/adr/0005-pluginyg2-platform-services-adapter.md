@@ -11,6 +11,7 @@ The project will replace the custom Yandex Games Bridge with the pinned PluginYG
 - Vendor the official PluginYG2 package at `v2.0092` with SHA-256 `8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3`.
 - Import only the core, Yandex Games platform support, and EnvirData module. Keep examples, advertising, authentication, storage, leaderboard, and unrelated modules out of this cutover.
 - Use `RobotArenaPlatformServices` and `PlatformServicesAdapter` as the project seam. Only `RobotArenaPluginYG2Backend` may reference `YG2`; gameplay consumes normalized status, capabilities, Game Ready, and pause events.
+- Use one narrow project-owned lifecycle diagnostics message over the existing PluginYG2 `YGSendMessage` component when the vendor callback surface cannot carry evidence back to Unity. It may report the terminal SDK state, actual capabilities, and an explicit Yandex pause/resume origin. It is not a second initializer, a general-purpose bridge, or a gameplay API.
 - Disable PluginYG2 automatic Game Ready, automatic pause policy, automatic project-setting application, and automatic define-symbol management in `Assets/PluginYourGames/Resources/SettingsYG2.asset`. The title menu marks readiness once, and the existing `PauseCoordinator` remains the authority for time, audio, cursor, and gameplay pause.
 - Build releases with the derived `RobotArenaPluginYG2` WebGL template. The template has one SDK loader and one initializer and retains PluginYG2 insertion points plus the existing canvas/browser compatibility behavior.
 - Keep the old Bridge only as a migration rollback/comparison path. It must not initialize alongside PluginYG2 and can be deleted after the draft smoke is accepted.
@@ -18,3 +19,5 @@ The project will replace the custom Yandex Games Bridge with the pinned PluginYG
 ## Consequences
 
 The project gets a maintained vendor SDK boundary and a smaller gameplay-facing contract, while preserving its existing pause and music lifecycle ownership. Plugin upgrades are deliberate package changes rather than incidental editor imports; optional platform products remain separate follow-up work. Until the draft gate passes, rollback is available by disabling the PluginYG2 define and returning to the pre-migration release path.
+
+The derived template remains the transport owner for browser-side evidence, while the backend remains the canonical owner of normalized acceptance logs and session-facing events. Vendor files are not patched to create this channel.

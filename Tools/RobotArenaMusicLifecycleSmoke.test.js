@@ -331,8 +331,9 @@ test('serves a non-SDK placeholder locally without emulating YaGames', async () 
 });
 
 test('marks direct PluginYG2 callback evidence as synthetic', () => {
-  assert.match(smokeSource, /platformPauseEvidence:[\s\S]*synthetic-template-callback/);
+  assert.match(smokeSource, /platformPauseEvidence:[\s\S]*synthetic-template-transport-only/);
   assert.match(smokeSource, /bypasses ysdk\.on/);
+  assert.match(smokeSource, /platformPauseWindow: null/);
 });
 
 test('requires local smoke to report an explicit non-SDK PluginYG2 state', () => {

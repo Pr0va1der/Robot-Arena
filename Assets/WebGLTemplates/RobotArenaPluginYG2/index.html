@@ -139,7 +139,9 @@
                 playerData: null,
                 leaderboard: null,
                 fullscreenAds: null
-            }
+            },
+            gameReadyOutcome: 'not-requested',
+            gameReadyFailureReason: ''
         };
         const NO_DATA = 'no data';
 
@@ -229,14 +231,16 @@
 
         const PauseCallback = () => {
             isPausedGame = true;
-            LogStyledMessage('[RobotArena.Platform] PluginYG2 platform pause=true');
+            LogStyledMessage('[RobotArena.PluginYG2.Transport] platform pause=true');
             YG2Instance('SetPauseGame', 'true');
+            YG2Instance('RobotArenaPlatformPause', 'true');
         };
 
         const ResumeCallback = () => {
             isPausedGame = false;
-            LogStyledMessage('[RobotArena.Platform] PluginYG2 platform pause=false');
+            LogStyledMessage('[RobotArena.PluginYG2.Transport] platform pause=false');
             YG2Instance('SetPauseGame', 'false');
+            YG2Instance('RobotArenaPlatformPause', 'false');
             FocusGame(false);
         };
 
@@ -258,6 +262,7 @@
                     loadingCover.style.background = "";
                     loadingCover.style.display = "none";
                     FocusGame();
+                    PublishPluginYG2RuntimeState();
                     // Fill Background [Build Modify]
                 }).catch((message) => {
                     console.error(message);
@@ -328,26 +333,107 @@
         }
 
         function SetPluginYG2InitState(state, failureReason = '') {
+            if (window.__robotArenaPluginYG2.initState !== 'waiting') {
+                return false;
+            }
+
             window.__robotArenaPluginYG2.initState = state;
             window.__robotArenaPluginYG2.initFinishedAt = Date.now();
             window.__robotArenaPluginYG2.failureReason = failureReason;
+            PublishPluginYG2RuntimeState();
             LogStyledMessage(
-                '[RobotArena.Platform] PluginYG2 SDK init state=' + state
+                '[RobotArena.PluginYG2.Transport] SDK init state=' + state
                 + (failureReason ? '; reason=' + failureReason : ''));
+            return true;
+        }
+
+        function PublishPluginYG2RuntimeState() {
+            if (ygGameInstance == null) {
+                return;
+            }
+
+            const capabilities = window.__robotArenaPluginYG2.capabilities || {};
+            const toCapabilityState = value => value === true
+                ? 'available'
+                : value === false
+                    ? 'unavailable'
+                    : 'unknown';
+            YG2Instance('RobotArenaPlatformState', JSON.stringify({
+                initState: window.__robotArenaPluginYG2.initState,
+                failureReason: window.__robotArenaPluginYG2.failureReason || '',
+                loadingApi: toCapabilityState(capabilities.loadingApi),
+                playerData: toCapabilityState(capabilities.playerData),
+                leaderboard: toCapabilityState(capabilities.leaderboard),
+                fullscreenAds: toCapabilityState(capabilities.fullscreenAds),
+                gameReadyOutcome: window.__robotArenaPluginYG2.gameReadyOutcome,
+                gameReadyFailureReason:
+                    window.__robotArenaPluginYG2.gameReadyFailureReason || ''
+            }));
+        }
+
+        function SetPluginYG2GameReadyOutcome(outcome, failureReason = '') {
+            const lifecycle = window.__robotArenaPluginYG2;
+            if (lifecycle.gameReadyOutcome === 'confirmed' ||
+                lifecycle.gameReadyOutcome === 'failed') {
+                return;
+            }
+
+            lifecycle.gameReadyOutcome = outcome;
+            lifecycle.gameReadyFailureReason = failureReason;
+            PublishPluginYG2RuntimeState();
+            LogStyledMessage(
+                '[RobotArena.PluginYG2.Transport] Game Ready outcome=' + outcome
+                + (failureReason ? '; reason=' + failureReason : ''));
+        }
+
+        function InstallPluginYG2GameReadyObservation() {
+            const loadingApi = ysdk && ysdk.features ? ysdk.features.LoadingAPI : null;
+            if (!loadingApi || typeof loadingApi.ready !== 'function' ||
+                loadingApi.ready.__robotArenaGameReadyObservation === true) {
+                return;
+            }
+
+            const originalReady = loadingApi.ready;
+            const observedReady = function (...args) {
+                try {
+                    const result = originalReady.apply(this, args);
+                    if (result && typeof result.then === 'function') {
+                        result.then(
+                            () => SetPluginYG2GameReadyOutcome('confirmed'),
+                            error => SetPluginYG2GameReadyOutcome(
+                                'failed',
+                                error && error.message ? error.message : String(error)));
+                    }
+                    else {
+                        SetPluginYG2GameReadyOutcome('unconfirmed');
+                    }
+
+                    return result;
+                }
+                catch (error) {
+                    const reason = error && error.message ? error.message : String(error);
+                    SetPluginYG2GameReadyOutcome('failed', reason);
+                    throw error;
+                }
+            };
+            observedReady.__robotArenaGameReadyObservation = true;
+            loadingApi.ready = observedReady;
         }
 
         function RecordPluginYG2Capabilities() {
             const features = ysdk && ysdk.features ? ysdk.features : {};
             const advertising = ysdk && ysdk.adv ? ysdk.adv : {};
             window.__robotArenaPluginYG2.capabilities = {
-                loadingApi: Boolean(features.LoadingAPI),
+                loadingApi: Boolean(features.LoadingAPI &&
+                    typeof features.LoadingAPI.ready === 'function'),
                 playerData: Boolean(ysdk && typeof ysdk.getPlayer === 'function'),
                 leaderboard: Boolean(ysdk && typeof ysdk.getLeaderboards === 'function'),
                 fullscreenAds: Boolean(advertising &&
                     typeof advertising.showFullscreenAdv === 'function')
             };
+            PublishPluginYG2RuntimeState();
             LogStyledMessage(
-                '[RobotArena.Platform] PluginYG2 capability report='
+                '[RobotArena.PluginYG2.Transport] capability report='
                 + JSON.stringify(window.__robotArenaPluginYG2.capabilities));
         }
 
@@ -380,6 +466,7 @@
 
                 ysdk.on('game_api_pause', PauseCallback);
                 ysdk.on('game_api_resume', ResumeCallback);
+                InstallPluginYG2GameReadyObservation();
                 RecordPluginYG2Capabilities();
 
                 // Additional init0 modules
@@ -395,7 +482,7 @@
                     ygGameInstance.SendMessage('YG2Instance', 'InitSDKComplete');
 
                 SetPluginYG2InitState('ready');
-                LogStyledMessage('Init YandexSDK Success');
+                LogStyledMessage('[RobotArena.PluginYG2.Transport] Init YandexSDK Success');
 
             } catch (e) {
                 const reason = e && e.message ? e.message : String(e);

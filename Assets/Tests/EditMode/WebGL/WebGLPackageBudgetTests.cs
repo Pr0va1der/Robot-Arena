@@ -172,6 +172,20 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(errors, Has.Some.Contains("RequestingEnvironmentData"));
         }
 
+        [Test]
+        public void PluginYG2_artifact_validation_ignores_comment_only_markers()
+        {
+            var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
+                "<!-- game_api_pause game_api_resume YaGames.init() /sdk.js -->\n"
+                + "<script src=\"/sdk.js\"></script>\n"
+                + "YaGames.init();\n"
+                + "ysdk.on('game_api_pause', PauseCallback);\n"
+                + "ysdk.on('game_api_resume', ResumeCallback);\n"
+                + "RequestingEnvironmentData(); SetEnvirData(); PluginYG2 v2.0092");
+
+            Assert.That(errors, Is.Empty);
+        }
+
         private void CreateArchive(params (string Name, int Size)[] entries)
         {
             using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))

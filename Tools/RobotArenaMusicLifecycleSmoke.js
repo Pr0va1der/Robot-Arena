@@ -955,14 +955,13 @@ function getBrowserResourceErrors(cdp, sessionId) {
   return [...networkErrors, ...logErrors];
 }
 
-function hasMusicPauseDiagnostic(cdp, sessionId, isPaused, sinceWallTime) {
-  const expectedState = `audioPaused=${isPaused ? 'True' : 'False'}`;
+function hasPluginYG2TransportDiagnostic(cdp, sessionId, isPaused, sinceWallTime) {
+  const expectedState = `platform pause=${isPaused ? 'true' : 'false'}`;
   return cdp.getConsoleMessages(sessionId).some(message =>
     message.type === 'log' &&
     message.wallTime >= sinceWallTime &&
-    message.text.includes('[RobotArena.Music]') &&
-    message.text.includes(expectedState) &&
-    (isPaused ? message.text.includes('activePauseSources=Platform') : true));
+    message.text.includes('[RobotArena.PluginYG2.Transport]') &&
+    message.text.includes(expectedState));
 }
 
 async function waitForMusicIntro(cdp, sessionId, timeoutMs) {
@@ -1075,7 +1074,8 @@ async function runSyntheticPlatformPauseCycle(
   pauseDurationMs,
   resumeSettleMs) {
   // This intentionally bypasses ysdk.on(...). It covers only the generated
-  // PluginYG2 template callback-to-Unity path and is never hosted SDK evidence.
+  // PluginYG2 template transport path and never claims hosted SDK evidence or
+  // a session pause while running in the local guest harness.
   const pausedAt = Date.now();
   const pauseDispatched = await evaluate(cdp, page.sessionId, `(() => {
     if (typeof PauseCallback !== 'function' || typeof YG2Instance !== 'function') {
@@ -1089,10 +1089,10 @@ async function runSyntheticPlatformPauseCycle(
     throw new Error('PluginYG2 template pause callback is unavailable for synthetic testing');
   }
 
-  const pauseDiagnosticObserved = await waitFor(
-    async () => hasMusicPauseDiagnostic(cdp, page.sessionId, true, pausedAt),
+  const pauseTransportObserved = await waitFor(
+    async () => hasPluginYG2TransportDiagnostic(cdp, page.sessionId, true, pausedAt),
     Math.max(5_000, resumeSettleMs + 1_000),
-    'PluginYG2 platform pause propagation');
+    'PluginYG2 synthetic pause transport');
   await delay(pauseDurationMs);
 
   const resumedAt = Date.now();
@@ -1108,16 +1108,19 @@ async function runSyntheticPlatformPauseCycle(
     throw new Error('PluginYG2 template resume callback is unavailable for synthetic testing');
   }
 
-  const resumeDiagnosticObserved = await waitFor(
-    async () => hasMusicPauseDiagnostic(cdp, page.sessionId, false, resumedAt),
+  const resumeTransportObserved = await waitFor(
+    async () => hasPluginYG2TransportDiagnostic(cdp, page.sessionId, false, resumedAt),
     Math.max(5_000, resumeSettleMs + 1_000),
-    'PluginYG2 platform resume propagation');
+    'PluginYG2 synthetic resume transport');
   await delay(resumeSettleMs);
   return {
     pausedAt,
     resumedAt,
-    pauseDiagnosticObserved,
-    resumeDiagnosticObserved,
+    pauseDiagnosticObserved: false,
+    resumeDiagnosticObserved: false,
+    pauseTransportObserved,
+    resumeTransportObserved,
+    platformPauseWindow: null,
   };
 }
 
@@ -1294,11 +1297,14 @@ async function runMusicLifecycleSmoke(options = {}) {
 
     const platformPauseWindows = [];
     for (let cycle = 0; cycle < syntheticPlatformPauseCycles; cycle++) {
-      platformPauseWindows.push(await runSyntheticPlatformPauseCycle(
+      const syntheticCycle = await runSyntheticPlatformPauseCycle(
         cdp,
         page,
         focusPauseMs,
-        resumeSettleMs));
+        resumeSettleMs);
+      if (syntheticCycle.platformPauseWindow) {
+        platformPauseWindows.push(syntheticCycle.platformPauseWindow);
+      }
     }
 
     for (let cycle = 0; cycle < focusCycles; cycle++) {
@@ -1339,7 +1345,7 @@ async function runMusicLifecycleSmoke(options = {}) {
       focusWindows,
       platformPauseWindows,
       platformPauseEvidence: syntheticPlatformPauseCycles > 0
-        ? 'synthetic-template-callback'
+        ? 'synthetic-template-transport-only'
         : 'none',
       pluginYG2Init,
       enterSession,

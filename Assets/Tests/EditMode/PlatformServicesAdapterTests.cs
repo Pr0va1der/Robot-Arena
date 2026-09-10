@@ -51,6 +51,53 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
+        public void Keeps_capabilities_unknown_until_backend_reports_a_result()
+        {
+            var backend = new FakeBackend(
+                PlatformServicesStatus.WaitingForSdk,
+                sdkInitialized: false,
+                environment: string.Empty,
+                language: string.Empty);
+            var adapter = new PlatformServicesAdapter(backend);
+
+            backend.PublishSnapshot(backend.Snapshot.WithSdkReady("production", "en"));
+
+            Assert.That(adapter.Current.LoadingApiStatus, Is.EqualTo(PlatformCapabilityStatus.Unknown));
+            Assert.That(adapter.Current.PlayerDataStatus, Is.EqualTo(PlatformCapabilityStatus.Unavailable));
+
+            backend.PublishSnapshot(backend.Snapshot.WithCapabilities(
+                PlatformCapabilityStatus.Available,
+                PlatformCapabilityStatus.Available,
+                PlatformCapabilityStatus.Unavailable,
+                PlatformCapabilityStatus.Available,
+                PlatformCapabilityStatus.Unavailable));
+
+            Assert.That(adapter.Current.LoadingApiStatus, Is.EqualTo(PlatformCapabilityStatus.Available));
+            Assert.That(adapter.Current.SupportsLeaderboard, Is.True);
+            Assert.That(adapter.Current.SupportsPlayerData, Is.False);
+        }
+
+        [Test]
+        public void Does_not_report_game_ready_success_when_loading_api_is_unavailable()
+        {
+            var backend = new FakeBackend(
+                PlatformServicesStatus.Ready,
+                sdkInitialized: true,
+                environment: "production",
+                language: "en");
+            var adapter = new PlatformServicesAdapter(backend);
+
+            backend.PublishSnapshot(backend.Snapshot.WithSdkReady("production", "en", false));
+            adapter.MarkInteractiveReady();
+
+            Assert.That(backend.MarkGameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Unavailable));
+            Assert.That(adapter.Current.GameReady, Is.False);
+        }
+
+        [Test]
         public void Does_not_request_game_ready_after_backend_reports_failure()
         {
             var backend = new FakeBackend(
@@ -175,7 +222,9 @@ namespace RobotArena.Session.Tests
             public void MarkGameReady()
             {
                 MarkGameReadyCallCount++;
-                Snapshot = Snapshot.WithGameReadyRequested();
+                Snapshot = Snapshot.LoadingApiStatus == PlatformCapabilityStatus.Unavailable
+                    ? Snapshot.WithGameReadyUnavailable("Loading API unavailable.")
+                    : Snapshot.WithGameReadyRequested();
                 SnapshotChanged?.Invoke(Snapshot);
             }
 

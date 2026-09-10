@@ -89,22 +89,34 @@ test('WebGL release build selects the PluginYG2 template', () => {
 test('WebGL release is pinned to the official PluginYG2 runtime', () => {
   assert.equal(pluginVersion, manifest.pluginVersion);
   assert.match(manifest.sourceArchiveSha256, /^[0-9A-F]{64}$/);
+  assert.match(manifest.vendoredFingerprint, /^[0-9A-F]{64}$/);
   assert.equal(manifest.platform, 'YandexGamesPlatform_yg');
   for (const define of manifest.requiredDefines) {
     assert.match(projectSettingsSource, new RegExp(`WebGL:.*\\b${define}\\b`));
   }
   assert.equal(manifest.modules.sort().join(','), 'Core,EnvirData,YandexGames');
   assert.match(releaseBuildSource, /ValidatePluginYG2ReleaseConfiguration\(\)/);
+  assert.match(releaseBuildSource, /ComputePluginYG2VendoredFingerprint/);
   assert.match(releaseBuildSource, /GetPluginYG2ArtifactErrors/);
 });
 
 test('platform backend uses PluginYG2 public events and APIs', () => {
   assert.match(backendSource, /YG\.YG2\.onGetSDKData\s*\+=\s*OnSdkData/);
-  assert.match(backendSource, /YG\.YG2\.onPauseGame\s*\+=\s*OnPauseGame/);
+  assert.match(backendSource, /RobotArenaPluginYG2RuntimeChannel\.StateChanged\s*\+=\s*OnRuntimeStateChanged/);
+  assert.match(backendSource, /RobotArenaPluginYG2RuntimeChannel\.PlatformPauseChanged\s*\+=\s*OnPlatformPauseChanged/);
+  assert.doesNotMatch(backendSource, /YG\.YG2\.onPauseGame/);
   assert.match(backendSource, /YG\.YG2\.GameReadyAPI\(\)/);
   assert.match(backendSource, /YG\.YG2\.envir\.language/);
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 SDK ready/);
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 Game Ready requested/);
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
+  assert.match(backendSource, /WithGameReadyUnavailable/);
   assert.doesNotMatch(backendSource, /DllImport|RobotArenaPlatformProbe/);
+});
+
+test('template reports transport evidence through one explicit lifecycle channel', () => {
+  assert.match(templateSource, /RobotArenaPlatformState/);
+  assert.match(templateSource, /RobotArenaPlatformPause/);
+  assert.match(templateSource, /PluginYG2\.Transport/);
+  assert.doesNotMatch(templateSource, /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
 });
