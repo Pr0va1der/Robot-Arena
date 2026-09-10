@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efa747916aa66674d96ea40ca8a480b2, type: 3}
+  m_Name: SettingsYG2
+  m_EditorClassIdentifier: 
+  Basic:
+    platform: {fileID: 11400000, guid: fabe82a4ab034324eb452cc7109f6d19, type: 2}
+    autoApplySettings: 0
+    autoPauseGame: 0
+    editTimeScale: 0
+    editEventSystem: 0
+    autoGRA: 0
+    logInEditor: 0
+    archivingBuild: 0
+    autoDefineSymbols: 0
+    syncInitSDK: 0
+    loadSceneIfSDKLate: 0
+    loadSceneIndex: 0
+    initDelaySimulation: 0
+    buildNumber: 0
+  Simulation:
+    device: 0
+    language: ru
+    enableInterAdv: 0
+    advIntervalSimulation: 60
+    durationAdv: 0.5
+    loadAdv: 0
+    testFailAds: 0
+    pauseOnFocusGame: 0
+  Templates:
+    logoImageFormat: 0
+    backgroundImgFormat: 2
+    customProgressBar: 0
+    fixedAspectRatio: 0
+    aspectRatio: 16/9
+    disableForMobile: 1
+    fillBackground: 0
+    imageBackground: 0
+    imageName: background.jpg
+    pixelRatioEnable: 0
+    pixelRatioValue: 1.3
+    developerBuild: 0
+  platformInfo: {}
+  common: {}
+  platformToggles:
+    autoPauseGame: 0
+    selectWebGLTemplate: 0
+    runInBackground: 0
+    enableExceptions: 0
+    compressionFormat: 0
+    decompressionFallback: 0
+    autoGraphicsAPI: 0
+    managedStrippingLevel: 0
+    dataCaching: 0
+    colorSpace: 0
+    archivingBuild: 0
+    syncInitSDK: 0

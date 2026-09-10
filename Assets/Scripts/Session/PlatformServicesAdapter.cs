@@ -98,6 +98,8 @@ namespace RobotArena.Platform
         event Action<bool> PlatformPauseChanged;
 
         void MarkGameReady();
+
+        void Dispose();
     }
 
     public sealed class PlatformServicesAdapter : IDisposable

@@ -93,7 +93,11 @@ namespace RobotArena.Platform
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void InstallAtStartup()
         {
+#if ROBOTARENA_PLUGINYG2
+            return;
+#else
             EnsureInstalled();
+#endif
         }
 
         public static RobotArenaPlatformProbe EnsureInstalled()

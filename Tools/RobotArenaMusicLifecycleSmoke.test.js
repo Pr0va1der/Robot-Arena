@@ -1,10 +1,14 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 
 const {
   analyzeMusicTrace,
   assertMusicLifecycle,
   assertSemanticModeTransition,
+  createStaticServer,
 } = require('./RobotArenaMusicLifecycleSmoke.js');
 
 function createTrace(loopContextTime) {
@@ -273,6 +277,29 @@ test('does not count a resumed post-loop intro as a semantic transition', () => 
   assert.equal(result.postLoopIntroStarts.length, 1);
   assert.doesNotThrow(() => assertMusicLifecycle(result, { expectedLoopStarts: 2 }));
   assert.doesNotThrow(() => assertSemanticModeTransition(result));
+});
+
+test('serves Brotli-compressed Unity assets at their logical URL', async () => {
+  const buildDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'robot-arena-music-server-'));
+  const assetDirectory = path.join(buildDirectory, 'Build');
+  fs.mkdirSync(assetDirectory);
+  fs.writeFileSync(
+    path.join(assetDirectory, 'Game.framework.js.br'),
+    Buffer.from('compressed fixture'));
+
+  const staticServer = await createStaticServer(buildDirectory);
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${staticServer.port}/Build/Game.framework.js`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-encoding'), 'br');
+    assert.equal(response.headers.get('content-type'), 'application/javascript; charset=utf-8');
+  } finally {
+    await new Promise(resolve => staticServer.server.close(resolve));
+    fs.rmSync(buildDirectory, { recursive: true, force: true });
+  }
 });
 
 test('allows a WebGL loop source to resume from a saved offset', () => {

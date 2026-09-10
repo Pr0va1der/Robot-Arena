@@ -45,6 +45,10 @@ namespace RobotArena.WebGL.Editor
                         {
                             rootIndexCount++;
                         }
+                        else if (entryName == "style.css")
+                        {
+                            // Unity's WebGL templates keep the shared stylesheet beside index.html.
+                        }
                         else if (!entryName.StartsWith("Build/", StringComparison.Ordinal))
                         {
                             errors.Add("all non-index entries must be under Build/: " + entryName);

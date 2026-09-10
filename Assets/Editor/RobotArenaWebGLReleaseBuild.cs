@@ -11,7 +11,7 @@ namespace RobotArena.WebGL.Editor
 {
     public static class RobotArenaWebGLReleaseBuild
     {
-        private const string ReleaseTemplate = "PROJECT:RobotArenaYandex";
+        private const string ReleaseTemplate = "PROJECT:RobotArenaPluginYG2";
         private const string ReleaseOutput = "Build/WebGL/RobotArenaRelease";
         private const string ReleaseArchive = "Build/WebGL/RobotArenaRelease-upload.zip";
         private const string ReleaseReport = "Build/WebGL/RobotArenaRelease-report.json";

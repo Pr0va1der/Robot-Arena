@@ -1,36 +1,46 @@
-# Yandex Games compatibility probe
+# Yandex Games integration
 
-This probe is intentionally smaller than the future Platform Services Adapter. It is a diagnostic boundary that can be uploaded with the current Unity project without adding a Yandex SDK dependency to gameplay code.
+The project uses PluginYG2 behind the project-owned `Platform Services Adapter`. Gameplay code depends on the normalized adapter contract; only the PluginYG2 backend references `YG2` directly.
 
-## Fixed compatibility target
+## Fixed integration target
 
-- Unity: `2022.3.56f1` (`dd0c98481d00`), unchanged.
-- Candidate SDK: PluginYG2 `v2.0092`.
-- Source: the official PluginYG2 repository and the package download linked from its release documentation: <https://github.com/JustPlay-Max/Unity-PluginYG-2> and <https://max-games.ru/public/pluginYG2/other/PluginYG2.unitypackage>.
-- Downloaded package SHA-256: `8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3`.
+- Unity: `2022.3.56f1` (`dd0c98481d00`).
+- PluginYG2: `v2.0092`.
+- Official package: <https://max-games.ru/public/pluginYG2/other/PluginYG2.unitypackage>.
+- Package SHA-256: `8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3`.
+- Imported production scope: PluginYG2 core, Yandex Games platform support, and EnvirData. Examples and unrelated optional product modules are not part of the integration.
 
-The package was unpacked into a disposable `.scratch/pluginyg2-2.0092` directory. It is not copied into `Assets/`: the production project must not acquire the plugin's global `YG2` initialization, generated platform symbols, or WebGL template before the draft check chooses the integration channel.
+`Assets/PluginYourGames/Resources/SettingsYG2.asset` keeps PluginYG2 automatic project mutation disabled. In particular, automatic Game Ready, automatic pause handling, automatic settings application, and automatic define-symbol management are disabled. The release build command remains the authority for release-only WebGL settings.
 
-As a pre-import smoke check, all 56 non-`Editor` C# files from that package were compiled against the Unity 2022.3.56f1 managed assemblies with WebGL/player defines. The compile completed without errors (three existing package warnings); this does not replace an actual Unity importer/build run.
+## Project-owned runtime boundary
 
-## Fallback bridge
+`RobotArenaPlatformServices` is installed before the first scene and owns the adapter lifetime. Its backend is selected at compile time:
 
-`RobotArenaPlatformProbe` and `RobotArenaPlatformProbe.jslib` provide the same compatibility boundaries required by the spike:
+- `ROBOTARENA_PLUGINYG2` selects `RobotArenaPluginYG2Backend`.
+- Without that symbol, the migration-only `RobotArenaPlatformProbeBackend` wraps the legacy probe.
 
-- SDK initialization through `YaGames.init()` or an already-created `window.ysdk`;
-- environment/application language read;
-- `game_api_pause` / `game_api_resume` callbacks;
-- callable Player data probe and structural detection of the modern `ysdk.leaderboards.getEntries` boundary, plus fullscreen-ad capability detection (the ad is not shown automatically);
-- one guarded `LoadingAPI.ready()` call after the title menu has had a frame to build its interactive controls.
+The adapter exposes SDK status, environment, language, capabilities, Game Ready, and platform pause events. The title menu marks the interactive boundary once; the adapter then sends Game Ready once the backend reports an initialized SDK. Missing SDK data remains a usable guest mode.
 
-The bridge never blocks the title screen. If the SDK is absent or does not answer within eight seconds, the probe reports `TimedOut`/`Failed` and the game remains usable as a guest. The eventual adapter will translate these reports into the guest-mode and pause contracts from issue #6; this probe deliberately does not own gameplay pause or cloud-save policy.
+PluginYG2 is the only SDK initializer after cutover. `RobotArenaPluginYG2Template` contains one `/sdk.js` loader and one `YaGames.init()` call, while PluginYG2 receives its initialization data through its normal template insertion points.
 
-The leaderboard check does not query a table, authenticate a player, or submit a score. It only checks the direct modern `ysdk.leaderboards.getEntries` method. A legacy-only `ysdk.getLeaderboards` object and malformed or missing leaderboard objects are reported as unsupported without invoking them.
+Platform pause is routed through the existing `PauseCoordinator`/`PauseMenu` lifecycle. The project owns `Time.timeScale`, audio, cursor, and gameplay pause state; PluginYG2 does not apply those policies automatically.
 
-`Assets/WebGLTemplates/RobotArenaYandex/index.html` loads the Yandex Games SDK before the Unity loader. The editor command `Robot Arena/Build WebGL platform probe` (or `RobotArenaPlatformProbeBuild.BuildWebGlProbe` in batch mode) temporarily selects that template and writes an upload-ready build to `Build/WebGL/RobotArenaPlatformProbe` without changing the project's saved template choice. The active build-scene list must contain `Assets/Scenes/Title Screen.unity`; the command fails early if it does not.
+## Release build and local verification
 
-## Verification boundary
+Use **Robot Arena → Build WebGL release package**. The command selects `PROJECT:RobotArenaPluginYG2` temporarily, builds the enabled scenes, validates the archive budget, writes `Build/WebGL/RobotArenaRelease-upload.zip`, and restores the saved Unity project settings.
 
-The package source and version are fixed above. Importing the package into an isolated Unity project was attempted with the installed Unity 2022.3.56f1 editor, but the headless editor could not acquire its existing Personal license IPC channel (`return code 199`). This is an environment limitation, not evidence that PluginYG2 is incompatible. The bridge is therefore kept as the upload-ready compatibility fallback; issue #38 must run the draft browser check and make the final channel choice before production integration.
+The local lifecycle check is:
 
-The Node bridge harness covers modern, legacy-only, and malformed leaderboard fixtures. The modern fixture must report `SupportsLeaderboard=true` without calling the deprecated initializer or the read method; the other fixtures must report `false` without interrupting SDK initialization.
+```text
+node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
+```
+
+The current licensed Unity release candidate passed the package gate: 20,969,570 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke passed two focus cycles with no same-sequence audible overlap and no resumed intro starts.
+
+The remaining production gate is the Yandex Games draft smoke in issue #38. It must confirm SDK/environment delivery, guest behavior, title-menu readiness, pause/resume, and the same music invariants in the hosted draft. The migration parent issue remains open until that human-controlled check is recorded.
+
+## Legacy probe during migration
+
+`RobotArenaPlatformProbe` remains in the repository only to support rollback and migration comparison. With `ROBOTARENA_PLUGINYG2` enabled it does not install or initialize its own runtime path, so two SDK initializers cannot be active in the release build. It may be removed after issue #38 is accepted and the final draft smoke has been recorded.
+
+The old probe build command and template are historical diagnostics, not the production release path. Do not add new gameplay dependencies on the probe or call its JavaScript bridge directly.

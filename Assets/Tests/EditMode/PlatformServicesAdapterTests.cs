@@ -61,6 +61,62 @@ namespace RobotArena.Session.Tests
             Assert.That(snapshotCount, Is.Zero);
         }
 
+        [Test]
+        public void Keeps_guest_mode_when_backend_is_unavailable()
+        {
+            var backend = new FakeBackend(
+                PlatformServicesStatus.Unavailable,
+                sdkInitialized: false,
+                environment: string.Empty,
+                language: string.Empty);
+            var adapter = new PlatformServicesAdapter(backend);
+
+            adapter.MarkInteractiveReady();
+
+            Assert.That(adapter.Current.Status, Is.EqualTo(PlatformServicesStatus.Unavailable));
+            Assert.That(backend.MarkGameReadyCallCount, Is.Zero);
+        }
+
+        [Test]
+        public void Forwards_repeated_platform_pause_cycles_in_order()
+        {
+            var backend = new FakeBackend(
+                PlatformServicesStatus.Ready,
+                sdkInitialized: true,
+                environment: "production",
+                language: "en");
+            var adapter = new PlatformServicesAdapter(backend);
+            var pauseStates = new System.Collections.Generic.List<bool>();
+            adapter.PlatformPauseChanged += pauseStates.Add;
+
+            backend.PublishPause(true);
+            backend.PublishPause(false);
+            backend.PublishPause(true);
+            backend.PublishPause(false);
+
+            Assert.That(pauseStates, Is.EqualTo(new[] { true, false, true, false }));
+        }
+
+        [Test]
+        public void Maps_platform_pause_to_pause_coordinator_source()
+        {
+            var backend = new FakeBackend(
+                PlatformServicesStatus.Ready,
+                sdkInitialized: true,
+                environment: "production",
+                language: "en");
+            var adapter = new PlatformServicesAdapter(backend);
+            var pauseCoordinator = new PauseCoordinator();
+            adapter.PlatformPauseChanged += isPaused =>
+                pauseCoordinator.SetSource(PauseSource.Platform, isPaused);
+
+            backend.PublishPause(true);
+            Assert.That(pauseCoordinator.ActiveSources, Is.EqualTo(PauseSource.Platform));
+
+            backend.PublishPause(false);
+            Assert.That(pauseCoordinator.ActiveSources, Is.EqualTo(PauseSource.None));
+        }
+
         private sealed class FakeBackend : IPlatformServicesBackend
         {
             public FakeBackend(
@@ -107,6 +163,12 @@ namespace RobotArena.Session.Tests
             {
                 Snapshot = snapshot;
                 SnapshotChanged?.Invoke(snapshot);
+            }
+
+            public void Dispose()
+            {
+                SnapshotChanged = null;
+                PlatformPauseChanged = null;
             }
         }
     }

@@ -45,6 +45,20 @@ namespace RobotArena.WebGL.Editor.Tests
         }
 
         [Test]
+        public void Unity_template_style_sheet_is_allowed_at_archive_root()
+        {
+            CreateArchive(
+                ("index.html", 5),
+                ("style.css", 3),
+                ("Build/Game.data", 10));
+
+            WebGLPackageBudgetResult result = WebGLPackageBudget.Measure(archivePath, 30);
+
+            Assert.That(result.IsValid, Is.True);
+            Assert.That(result.Errors, Is.Empty);
+        }
+
+        [Test]
         public void Budget_uses_uncompressed_entry_sizes_not_zip_size()
         {
             CreateArchive(("index.html", 1), ("Build/Game.data", 20));

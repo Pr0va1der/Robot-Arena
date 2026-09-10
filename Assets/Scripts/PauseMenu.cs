@@ -1,3 +1,4 @@
+using RobotArena.Platform;
 using RobotArena.Session;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -15,6 +16,7 @@ public class PauseMenu : MonoBehaviour
     private bool applicationWasPaused;
     private bool tutorialMode;
     private bool resultMode;
+    private RobotArenaPlatformServices platformServices;
 
     public PauseCoordinator PauseCoordinator => pauseCoordinator;
     public bool IsPaused => pauseCoordinator.IsPaused;
@@ -29,6 +31,11 @@ public class PauseMenu : MonoBehaviour
     {
         pauseCoordinator.PauseStateChanged += OnPauseStateChanged;
         pauseCoordinator.RequirePointerLockClick();
+
+        platformServices = RobotArenaPlatformServices.EnsureInstalled();
+#if UNITY_WEBGL
+        platformServices.PlatformPauseChanged += OnPlatformPauseChanged;
+#endif
 
         Canvas canvas = GetComponent<Canvas>();
         DesktopCanvasLayout.Ensure(canvas);
@@ -149,7 +156,16 @@ public class PauseMenu : MonoBehaviour
 
     private void OnApplicationPause(bool isPaused)
     {
+#if UNITY_WEBGL
+        // The WebGL platform backend publishes the normalized pause event.
+#else
         UpdateLifecyclePause(PauseSource.Platform, isPaused, ref applicationWasPaused);
+#endif
+    }
+
+    private void OnPlatformPauseChanged(bool isPaused)
+    {
+        SetPlatformPaused(isPaused);
     }
 
     private void OnPauseStateChanged()
@@ -225,6 +241,12 @@ public class PauseMenu : MonoBehaviour
 
     private void OnDestroy()
     {
+#if UNITY_WEBGL
+        if (platformServices != null)
+        {
+            platformServices.PlatformPauseChanged -= OnPlatformPauseChanged;
+        }
+#endif
         pauseCoordinator.PauseStateChanged -= OnPauseStateChanged;
         GameIsPaused = false;
         AudioIsPaused = false;

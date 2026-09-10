@@ -494,12 +494,16 @@ function createStaticServer(buildDirectory) {
       const requestedPath = requestUrl.pathname === '/'
         ? 'index.html'
         : decodeURIComponent(requestUrl.pathname).replace(/^\/+/, '');
-      const filePath = path.resolve(root, requestedPath);
+      let filePath = path.resolve(root, requestedPath);
       const relativePath = path.relative(root, filePath);
       if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         response.writeHead(403);
         response.end();
         return;
+      }
+
+      if (!fs.existsSync(filePath) && fs.existsSync(filePath + '.br')) {
+        filePath += '.br';
       }
 
       const stat = await fs.promises.stat(filePath);
@@ -817,6 +821,12 @@ async function summarizeMusicTrace(cdp, sessionId) {
   }
 }
 
+function getConsoleErrors(cdp, sessionId) {
+  return cdp.getConsoleMessages(sessionId)
+    .filter(message => message.type === 'error')
+    .map(message => message.text);
+}
+
 async function waitForMusicIntro(cdp, sessionId, timeoutMs) {
   try {
     await waitFor(
@@ -1014,10 +1024,18 @@ async function runMusicLifecycleSmoke(options = {}) {
       async () => evaluate(cdp, page.sessionId, 'Boolean(window.__robotArenaMusicLifecycle)'),
       waitMs,
       'music instrumentation');
-    await waitFor(
-      async () => evaluate(cdp, page.sessionId, 'Boolean(window.unityInstance)'),
-      waitMs,
-      'Unity WebGL initialization');
+    try {
+      await waitFor(
+        async () => evaluate(cdp, page.sessionId, 'Boolean(window.unityInstance)'),
+        waitMs,
+        'Unity WebGL initialization');
+    } catch (error) {
+      const consoleMessages = cdp.getConsoleMessages(page.sessionId)
+        .slice(-20)
+        .map(message => `${message.type || 'log'}: ${message.text}`)
+        .join(' | ');
+      throw new Error(`${error.message}; browser console=[${consoleMessages}]`);
+    }
 
     if (enterSession) {
       await delay(sessionLoadMs);
@@ -1081,6 +1099,10 @@ async function runMusicLifecycleSmoke(options = {}) {
     }
 
     const trace = await readTrace(cdp, page.sessionId);
+    const consoleErrors = getConsoleErrors(cdp, page.sessionId);
+    if (consoleErrors.length > 0) {
+      throw new Error(`browser console errors: ${consoleErrors.join(' | ')}`);
+    }
     const analysis = analyzeMusicTrace(trace.events, {
       focusLostAt,
       focusRestoredAt,
@@ -1099,6 +1121,7 @@ async function runMusicLifecycleSmoke(options = {}) {
       focusRestoredAt,
       focusWindows,
       enterSession,
+      consoleErrors,
       ...analysis,
     };
   } finally {

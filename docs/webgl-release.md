@@ -2,7 +2,7 @@
 
 Use **Robot Arena → Build WebGL release package** in the Unity Editor. The command
 cleans `Build/WebGL/RobotArenaRelease`, builds all enabled scenes with the
-`RobotArenaYandex` template, creates `RobotArenaRelease-upload.zip`, and writes a
+`RobotArenaPluginYG2` template, creates `RobotArenaRelease-upload.zip`, and writes a
 JSON report next to it.
 
 The release profile is intentionally desktop-first: it uses Brotli, DXT, engine
