@@ -436,13 +436,20 @@ namespace RobotArena.WebGL.Editor
                 errors.Add("Manifest platform and requiredDefines are required.");
             }
 
+            string[] requiredModules = { "Core", "YandexGames", "EnvirData" };
             if (manifest.modules == null || manifest.modules.Length == 0)
             {
                 errors.Add("Manifest modules are required.");
             }
             else
             {
-                foreach (string requiredModule in new[] { "Core", "YandexGames", "EnvirData" })
+                if (manifest.modules.Length != requiredModules.Length)
+                {
+                    errors.Add(
+                        "Manifest modules must contain only Core, YandexGames, and EnvirData.");
+                }
+
+                foreach (string requiredModule in requiredModules)
                 {
                     bool present = false;
                     foreach (string module in manifest.modules)
