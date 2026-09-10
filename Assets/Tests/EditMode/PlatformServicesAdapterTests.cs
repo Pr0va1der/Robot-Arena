@@ -150,6 +150,44 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
+        public void Preserves_terminal_guest_states_without_requesting_game_ready()
+        {
+            foreach (PlatformServicesStatus terminalStatus in new[]
+                     {
+                         PlatformServicesStatus.TimedOut,
+                         PlatformServicesStatus.Failed,
+                         PlatformServicesStatus.Unavailable
+                     })
+            {
+                var backend = new FakeBackend(
+                    PlatformServicesStatus.WaitingForSdk,
+                    sdkInitialized: false,
+                    environment: string.Empty,
+                    language: string.Empty);
+                var adapter = new PlatformServicesAdapter(backend);
+
+                backend.PublishSnapshot(new PlatformServicesSnapshot(
+                    terminalStatus,
+                    sdkDetected: false,
+                    sdkInitialized: false,
+                    environment: string.Empty,
+                    language: string.Empty,
+                    loadingApiStatus: PlatformCapabilityStatus.Unknown,
+                    pauseStatus: PlatformCapabilityStatus.Unavailable,
+                    playerDataStatus: PlatformCapabilityStatus.Unavailable,
+                    leaderboardStatus: PlatformCapabilityStatus.Unavailable,
+                    fullscreenAdsStatus: PlatformCapabilityStatus.Unavailable,
+                    gameReadyStatus: PlatformGameReadyStatus.NotRequested,
+                    failureReason: "synthetic terminal state"));
+
+                adapter.MarkInteractiveReady();
+
+                Assert.That(adapter.Current.Status, Is.EqualTo(terminalStatus));
+                Assert.That(backend.MarkGameReadyCallCount, Is.Zero);
+            }
+        }
+
+        [Test]
         public void Forwards_repeated_platform_pause_cycles_in_order()
         {
             var backend = new FakeBackend(

@@ -54,9 +54,11 @@ In the Yandex draft, successful real-SDK integration is identified by the
 structured runtime messages `[RobotArena.Platform] PluginYG2 SDK ready`,
 `PluginYG2 Game Ready requested`, and `PluginYG2 platform pause=True/False`,
 together with the official SDK's own Game Ready outcome. The request message is
-not itself a confirmation. The browser template also emits a capability report by
-checking entry-point presence only; it does not call Player, leaderboard, or
-advertising APIs in this migration.
+not itself a confirmation. The browser template also emits a
+`[RobotArena.PluginYG2.Transport]` capability diagnostic by checking entry-point
+presence only; it does not call Player, leaderboard, or advertising APIs in this
+migration. The backend's `[RobotArena.Platform]` report is the canonical
+acceptance evidence.
 These messages originate after data and events pass through the official `YG2`
 APIs into `RobotArenaPluginYG2Backend`; they must be captured together with the
 successful Yandex `/sdk.js` network request.

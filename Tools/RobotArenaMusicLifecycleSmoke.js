@@ -1068,7 +1068,7 @@ async function runFocusCycle(
   return { lostAt, restoredAt };
 }
 
-async function runSyntheticPlatformPauseCycle(
+async function runSyntheticPluginYG2TransportCycle(
   cdp,
   page,
   pauseDurationMs,
@@ -1297,7 +1297,7 @@ async function runMusicLifecycleSmoke(options = {}) {
 
     const platformPauseWindows = [];
     for (let cycle = 0; cycle < syntheticPlatformPauseCycles; cycle++) {
-      const syntheticCycle = await runSyntheticPlatformPauseCycle(
+      const syntheticCycle = await runSyntheticPluginYG2TransportCycle(
         cdp,
         page,
         focusPauseMs,

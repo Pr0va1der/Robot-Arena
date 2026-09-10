@@ -6,7 +6,11 @@ const path = require('node:path');
 
 const EXPECTED_PLUGIN = 'PluginYG2';
 const EXPECTED_VERSION = 'v2.0092';
+const EXPECTED_VERSION_FILE = 'Assets/PluginYourGames/Version.txt';
+const EXPECTED_TEMPLATE_FILE = 'Assets/WebGLTemplates/RobotArenaPluginYG2/index.html';
 const EXPECTED_PLATFORM = 'YandexGamesPlatform_yg';
+const EXPECTED_SDK_LOADER = '<script src="/sdk.js"></script>';
+const EXPECTED_SDK_INITIALIZER = 'YaGames.init()';
 const EXPECTED_SOURCE_ARCHIVE_SHA256 =
   '8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3';
 const EXPECTED_VENDORED_FINGERPRINT =
@@ -30,6 +34,18 @@ const IGNORED_VENDOR_FILES = new Set([
   'Editor/BuildLogYG2.txt',
   'Editor/PluginPrefs.json',
 ]);
+const EXPECTED_REQUIRED_ARTIFACT_MARKERS = [
+  'game_api_pause',
+  'game_api_resume',
+  'RequestingEnvironmentData',
+  'SetEnvirData',
+  'PluginYG2 v2.0092',
+];
+const EXPECTED_FORBIDDEN_ARTIFACT_MARKERS = [
+  'RobotArenaPlatformProbe',
+  '__robotArenaPlatformProbe',
+  'RobotArenaPlatformProbe_',
+];
 
 function getVendorFiles(vendorRoot) {
   const files = [];
@@ -80,6 +96,10 @@ function normalizeList(values) {
   return Array.isArray(values) ? [...values].sort() : [];
 }
 
+function hasExactValues(actual, expected) {
+  return normalizeList(actual).join('\u0000') === normalizeList(expected).join('\u0000');
+}
+
 function validateProvenance({ manifest, vendorRoot, archivePath, requireArchive = false }) {
   const errors = [];
   if (!manifest) {
@@ -92,8 +112,20 @@ function validateProvenance({ manifest, vendorRoot, archivePath, requireArchive 
   if (manifest.pluginVersion !== EXPECTED_VERSION) {
     errors.push(`PluginYG2 version must be ${EXPECTED_VERSION}.`);
   }
+  if (manifest.versionFile !== EXPECTED_VERSION_FILE) {
+    errors.push(`PluginYG2 version file must be ${EXPECTED_VERSION_FILE}.`);
+  }
+  if (manifest.templateFile !== EXPECTED_TEMPLATE_FILE) {
+    errors.push(`PluginYG2 template file must be ${EXPECTED_TEMPLATE_FILE}.`);
+  }
   if (manifest.platform !== EXPECTED_PLATFORM) {
     errors.push(`PluginYG2 platform must be ${EXPECTED_PLATFORM}.`);
+  }
+  if (manifest.sdkLoader !== EXPECTED_SDK_LOADER) {
+    errors.push('PluginYG2 SDK loader does not match the pinned integration policy.');
+  }
+  if (manifest.sdkInitializer !== EXPECTED_SDK_INITIALIZER) {
+    errors.push('PluginYG2 SDK initializer does not match the pinned integration policy.');
   }
   if (manifest.sourceArchiveSha256 !== EXPECTED_SOURCE_ARCHIVE_SHA256) {
     errors.push('PluginYG2 source archive SHA-256 does not match the pinned upstream receipt.');
@@ -103,6 +135,12 @@ function validateProvenance({ manifest, vendorRoot, archivePath, requireArchive 
   }
   if (normalizeList(manifest.requiredDefines).join(';') !== normalizeList(EXPECTED_DEFINES).join(';')) {
     errors.push('PluginYG2 required defines do not match the integration policy.');
+  }
+  if (!hasExactValues(manifest.requiredArtifactMarkers, EXPECTED_REQUIRED_ARTIFACT_MARKERS)) {
+    errors.push('PluginYG2 required artifact markers do not match the integration policy.');
+  }
+  if (!hasExactValues(manifest.forbiddenArtifactMarkers, EXPECTED_FORBIDDEN_ARTIFACT_MARKERS)) {
+    errors.push('PluginYG2 forbidden artifact markers do not match the integration policy.');
   }
 
   if (!vendorRoot || !fs.existsSync(vendorRoot)) {
@@ -226,7 +264,13 @@ module.exports = {
   EXPECTED_PLATFORM,
   EXPECTED_PLUGIN,
   EXPECTED_SOURCE_ARCHIVE_SHA256,
+  EXPECTED_TEMPLATE_FILE,
   EXPECTED_VERSION,
+  EXPECTED_VERSION_FILE,
+  EXPECTED_SDK_INITIALIZER,
+  EXPECTED_SDK_LOADER,
+  EXPECTED_REQUIRED_ARTIFACT_MARKERS,
+  EXPECTED_FORBIDDEN_ARTIFACT_MARKERS,
   EXPECTED_VENDORED_FINGERPRINT,
   computeFileSha256,
   computeVendoredFingerprint,

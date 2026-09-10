@@ -29,11 +29,12 @@ node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaReleas
 
 The check requires Node 22 or newer and Microsoft Edge. It serves the Brotli package over a local HTTP server, enables audio with a real pointer gesture, switches to a background tab during the first calm intro, restores the game focus, and instruments WebAudio buffer starts and stops. It fails on console or resource errors, same-sequence audible overlap, more than one authoritative zero-offset loop for a semantic sequence, a loop start during focus loss, or a loop start before the resumed intro has finished. WebGL backend restarts with a positive resume offset are retained as evidence and are not counted as duplicate sequence starts. With `--enter-session`, distinct WebAudio buffer identities also verify that the initial calm cue reaches its loop before the combat cue begins. The local server returns an inert `/sdk.js` placeholder only to avoid a missing-resource error; it neither defines `YaGames` nor emulates the Yandex SDK. The JSON output is music/focus evidence, not platform SDK acceptance evidence. It also records `pluginYG2Init` so a local run proves that the non-SDK path was explicitly selected (`local`, `failed`, or `timeout`) instead of silently pretending to have a Yandex SDK.
 
-For a local diagnostic of the generated PluginYG2 callback-to-Unity path, add
+For a local diagnostic of the generated PluginYG2 transport-to-Unity path, add
 `--synthetic-platform-pause-cycles 2`. This invokes the generated template
 callbacks directly. It is useful for regression diagnosis, but it does not prove
 that Yandex delivered `game_api_pause` or `game_api_resume`; its JSON result is
-marked with `platformPauseEvidence: "synthetic-template-callback"`.
+marked with `platformPauseEvidence: "synthetic-template-transport-only"`; the
+synthetic cycle does not create a hosted platform-pause window.
 
 To cover the pre-start lead-window and the combat intro in the same local run,
 use the optional timing matrix:
@@ -53,12 +54,13 @@ no-early-loop invariants from the saved trace.
 The production package uses the official PluginYG2 integration. The release build
 reads `Tools/RobotArenaPluginYG2Integration.json` as the single integration
 manifest and fails unless its pinned PluginYG2 version, source archive SHA-256,
-required WebGL scripting defines, exactly one `/sdk.js` loader, exactly one
-`YaGames.init()` call, and minimal module set are present. After Unity and the
-PluginYG2 postprocessor finish, the validator checks the generated `index.html`
-again; validating the source template alone is insufficient. The generated report
-records `platformSdk`, `pluginVersion`, `pluginSourceArchiveSha256`,
-`artifactIsValid`, and `sdkLoader`.
+vendored fingerprint, required WebGL scripting defines, exactly one `/sdk.js`
+loader and `YaGames.init()` across the generated files, and minimal module set are
+present. After Unity and the PluginYG2 postprocessor finish, the validator checks
+the generated artifact and then repeats the lifecycle checks against the upload
+archive; validating the source template alone is insufficient. The generated
+report records the actual integration coordinates, artifact/archive checksums,
+validation stage/errors, and `releaseIsUploadReady`.
 
 The template bounds `YaGames.init()` by eight seconds. A successful init enters
 the official PluginYG2 path; a rejection, missing SDK, or timeout starts Unity in
@@ -77,6 +79,10 @@ real platform iframe. Save console and network evidence showing:
   confirmation;
 - platform-delivered pause and resume logs from
   `[RobotArena.Platform] PluginYG2 platform pause=...`;
-- no `RobotArenaPlatformProbe` initialization or custom bridge calls.
+- no `RobotArenaPlatformProbe` initialization or general-purpose custom bridge
+  calls. The explicitly documented `RobotArenaPlatformState` and
+  `RobotArenaPlatformPause` messages are the single narrow project-owned
+  lifecycle transport channel; their `[RobotArena.PluginYG2.Transport]` logs are
+  diagnostics, not acceptance evidence.
 
 Only this hosted draft evidence satisfies the platform SDK gate.

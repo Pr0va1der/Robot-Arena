@@ -296,6 +296,21 @@ test('Game Ready observation stays honest for void APIs and confirms only a reso
     confirmed.context);
   await confirmed.settle();
   assert.equal(confirmed.getState().gameReadyOutcome, 'confirmed');
+
+  const rejected = Promise.reject(new Error('synthetic Game Ready rejection'));
+  rejected.catch(() => {});
+  const failed = createHarness({
+    sdkMode: 'resolve',
+    gameReadyResult: rejected,
+  });
+  failed.resolveSdk();
+  await failed.settle();
+  vm.runInContext(
+    'InstallPluginYG2GameReadyObservation(); ysdk.features.LoadingAPI.ready();',
+    failed.context);
+  await failed.settle();
+  assert.equal(failed.getState().gameReadyOutcome, 'failed');
+  assert.equal(failed.getState().gameReadyFailureReason, 'synthetic Game Ready rejection');
 });
 
 module.exports = {

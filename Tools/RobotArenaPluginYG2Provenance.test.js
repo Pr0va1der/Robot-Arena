@@ -31,10 +31,16 @@ test('provenance validation rejects mutated policy coordinates', () => {
   const mutatedManifest = {
     ...manifest,
     pluginVersion: 'v2.0091',
+    versionFile: 'Assets/Other/Version.txt',
+    templateFile: 'Assets/WebGLTemplates/Custom/index.html',
     platform: 'CustomPlatform',
+    sdkLoader: '<script src="/custom-sdk.js"></script>',
+    sdkInitializer: 'Custom.init()',
     sourceArchiveSha256: '0'.repeat(64),
     modules: ['Core', 'YandexGames', 'Advertising'],
     requiredDefines: ['ROBOTARENA_PLUGINYG2'],
+    requiredArtifactMarkers: ['custom-marker'],
+    forbiddenArtifactMarkers: [],
     vendoredFingerprint: '0'.repeat(64),
   };
 
@@ -45,10 +51,15 @@ test('provenance validation rejects mutated policy coordinates', () => {
   });
 
   assert.ok(errors.some(error => error.includes('version')));
+  assert.ok(errors.some(error => error.includes('version file')));
+  assert.ok(errors.some(error => error.includes('template file')));
   assert.ok(errors.some(error => error.includes('platform')));
+  assert.ok(errors.some(error => error.includes('SDK loader')));
+  assert.ok(errors.some(error => error.includes('SDK initializer')));
   assert.ok(errors.some(error => error.includes('SHA-256')));
   assert.ok(errors.some(error => error.includes('modules')));
   assert.ok(errors.some(error => error.includes('defines')));
+  assert.ok(errors.some(error => error.includes('artifact markers')));
   assert.ok(errors.some(error => error.includes('fingerprint')));
 });
 

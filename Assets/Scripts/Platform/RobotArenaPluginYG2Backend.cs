@@ -222,11 +222,27 @@ namespace RobotArena.Platform
                 runtimeState == null ? null : runtimeState.leaderboard);
             PlatformCapabilityStatus fullscreenAdsStatus = ParseCapability(
                 runtimeState == null ? null : runtimeState.fullscreenAds);
-            Debug.Log(
-                "[RobotArena.Platform] PluginYG2 SDK ready; appId="
-                + environment
-                + "; language="
-                + language);
+            bool alreadyReady = snapshot.Status == PlatformServicesStatus.Ready;
+            if (alreadyReady &&
+                string.Equals(snapshot.Environment, environment, StringComparison.Ordinal) &&
+                string.Equals(snapshot.Language, language, StringComparison.Ordinal) &&
+                snapshot.LoadingApiStatus == loadingApiStatus &&
+                snapshot.PlayerDataStatus == playerDataStatus &&
+                snapshot.LeaderboardStatus == leaderboardStatus &&
+                snapshot.FullscreenAdsStatus == fullscreenAdsStatus)
+            {
+                return;
+            }
+
+            if (!alreadyReady)
+            {
+                Debug.Log(
+                    "[RobotArena.Platform] PluginYG2 SDK ready; appId="
+                    + environment
+                    + "; language="
+                    + language);
+            }
+
             snapshot = new PlatformServicesSnapshot(
                 PlatformServicesStatus.Ready,
                 sdkDetected: true,
@@ -248,7 +264,7 @@ namespace RobotArena.Platform
             }
             SnapshotChanged?.Invoke(snapshot);
             Debug.Log(
-                "[RobotArena.Platform] PluginYG2 capabilities="
+                "[RobotArena.Platform] PluginYG2 capability report="
                 + "loadingApi=" + loadingApiStatus
                 + "; playerData=" + playerDataStatus
                 + "; leaderboard=" + leaderboardStatus
@@ -298,13 +314,16 @@ namespace RobotArena.Platform
             if (outcome == "confirmed")
             {
                 PublishSnapshot(snapshot.WithGameReadyConfirmed());
+                Debug.Log("[RobotArena.Platform] PluginYG2 Game Ready confirmed");
             }
             else if (outcome == "failed")
             {
-                PublishSnapshot(snapshot.WithGameReadyFailed(
-                    string.IsNullOrEmpty(state.gameReadyFailureReason)
-                        ? "PluginYG2 Loading API.ready() failed."
-                        : state.gameReadyFailureReason));
+                string reason = string.IsNullOrEmpty(state.gameReadyFailureReason)
+                    ? "PluginYG2 Loading API.ready() failed."
+                    : state.gameReadyFailureReason;
+                PublishSnapshot(snapshot.WithGameReadyFailed(reason));
+                Debug.LogError(
+                    "[RobotArena.Platform] PluginYG2 Game Ready failed; reason=" + reason);
             }
         }
 
