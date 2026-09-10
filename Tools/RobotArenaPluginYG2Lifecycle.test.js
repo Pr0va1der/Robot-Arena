@@ -44,6 +44,7 @@ function createHarness({
   sdkMode = 'resolve',
   capabilities = {},
   gameReadyResult,
+  unityMode = 'resolve',
 } = {}) {
   const messages = [];
   const logs = [];
@@ -51,9 +52,13 @@ function createHarness({
   const listeners = new Map();
   let sdkResolve;
   let sdkReject;
+  let unityResolve;
   const sdkPromise = new Promise((resolve, reject) => {
     sdkResolve = resolve;
     sdkReject = reject;
+  });
+  const unityPromise = new Promise(resolve => {
+    unityResolve = resolve;
   });
   const sdkHandlers = new Map();
   const realSetTimeout = setTimeout;
@@ -153,11 +158,12 @@ function createHarness({
     requestAnimationFrame: windowObject.requestAnimationFrame,
     createUnityInstance(_canvas, _config, onProgress) {
       onProgress(1);
-      return Promise.resolve({
+      const unityInstance = {
         SendMessage(objectName, method, argument) {
           messages.push({ objectName, method, argument });
         },
-      });
+      };
+      return unityMode === 'deferred' ? unityPromise : Promise.resolve(unityInstance);
     },
   };
   context.Element.prototype.requestPointerLock = function requestPointerLock() {
@@ -196,6 +202,13 @@ function createHarness({
     },
     rejectSdk(error = new Error('synthetic late rejection')) {
       sdkReject(error);
+    },
+    resolveUnity() {
+      unityResolve({
+        SendMessage(objectName, method, argument) {
+          messages.push({ objectName, method, argument });
+        },
+      });
     },
     async settle(milliseconds = 30) {
       await wait(milliseconds);
@@ -273,6 +286,26 @@ test('explicit pause callbacks use the narrow platform-origin message', async ()
       .map(message => message.argument),
     ['true', 'false']);
   assert.doesNotMatch(harness.logs.join('\n'), /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
+});
+
+test('platform pause received before Unity is ready is delivered after Unity startup', async () => {
+  const harness = createHarness({ sdkMode: 'resolve', unityMode: 'deferred' });
+  harness.resolveSdk();
+  await harness.settle();
+
+  vm.runInContext('PauseCallback();', harness.context);
+  assert.equal(
+    harness.messages.some(message => message.method === 'RobotArenaPlatformPause'),
+    false);
+
+  harness.resolveUnity();
+  await harness.settle(40);
+
+  assert.deepEqual(
+    harness.messages
+      .filter(message => message.method === 'RobotArenaPlatformPause')
+      .map(message => message.argument),
+    ['true']);
 });
 
 test('Game Ready observation stays honest for void APIs and confirms only a resolved promise', async () => {

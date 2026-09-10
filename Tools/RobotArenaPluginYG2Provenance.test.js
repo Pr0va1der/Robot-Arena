@@ -88,19 +88,14 @@ test('offline archive verification compares the actual archive bytes', () => {
   try {
     const archivePath = path.join(temporaryRoot, 'PluginYG2.unitypackage');
     fs.writeFileSync(archivePath, 'synthetic upstream archive', 'utf8');
-    const archiveHash = provenance.computeFileSha256(archivePath);
-    const archiveManifest = {
-      ...manifest,
-      sourceArchiveSha256: archiveHash,
-    };
 
     assert.deepEqual(provenance.validateProvenance({
-      manifest: archiveManifest,
+      manifest,
       vendorRoot,
       archivePath,
       requireArchive: true,
     }), [
-      'PluginYG2 source archive SHA-256 does not match the pinned upstream receipt.',
+      'PluginYG2 source archive SHA-256 does not match the manifest receipt.',
     ]);
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });

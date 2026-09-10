@@ -487,16 +487,12 @@ namespace RobotArena.WebGL.Editor
         {
             var errors = new List<string>();
             errors.AddRange(GetPluginYG2ManifestErrors(manifest));
-            if (errors.Count > 0)
+            if (manifest == null)
             {
                 return errors;
             }
 
             errors.AddRange(GetPluginYG2VendoredErrors(manifest));
-            if (errors.Count > 0)
-            {
-                return errors;
-            }
 
             var configuredDefines = new HashSet<string>(
                 (defineSymbols ?? string.Empty).Split(
@@ -504,7 +500,7 @@ namespace RobotArena.WebGL.Editor
                     StringSplitOptions.RemoveEmptyEntries),
                 StringComparer.Ordinal);
 
-            foreach (string requiredDefine in manifest.requiredDefines)
+            foreach (string requiredDefine in manifest.requiredDefines ?? new string[0])
             {
                 if (!configuredDefines.Contains(requiredDefine))
                 {

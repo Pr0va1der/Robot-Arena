@@ -126,6 +126,7 @@
         let syncInit = false;
         let isVisibility = true;
         let isPausedGame = false;
+        let pendingPlatformPause = null;
         let unityStartRequested = false;
         const PLUGIN_YG2_INIT_TIMEOUT_MS = 8000;
         window.__robotArenaPluginYG2 = {
@@ -233,14 +234,14 @@
             isPausedGame = true;
             LogStyledMessage('[RobotArena.PluginYG2.Transport] platform pause=true');
             YG2Instance('SetPauseGame', 'true');
-            YG2Instance('RobotArenaPlatformPause', 'true');
+            SendPluginYG2PlatformPause(true);
         };
 
         const ResumeCallback = () => {
             isPausedGame = false;
             LogStyledMessage('[RobotArena.PluginYG2.Transport] platform pause=false');
             YG2Instance('SetPauseGame', 'false');
-            YG2Instance('RobotArenaPlatformPause', 'false');
+            SendPluginYG2PlatformPause(false);
             FocusGame(false);
         };
 
@@ -263,6 +264,11 @@
                     loadingCover.style.display = "none";
                     FocusGame();
                     PublishPluginYG2RuntimeState();
+                    if (pendingPlatformPause !== null) {
+                        const queuedPlatformPause = pendingPlatformPause;
+                        pendingPlatformPause = null;
+                        YG2Instance('RobotArenaPlatformPause', queuedPlatformPause);
+                    }
                     // Fill Background [Build Modify]
                 }).catch((message) => {
                     console.error(message);
@@ -326,6 +332,16 @@
             else {
                 ygGameInstance.SendMessage('YG2Instance', method, arg);
             }
+        }
+
+        function SendPluginYG2PlatformPause(isPaused) {
+            const value = isPaused ? 'true' : 'false';
+            if (ygGameInstance == null) {
+                pendingPlatformPause = value;
+                return;
+            }
+
+            YG2Instance('RobotArenaPlatformPause', value);
         }
 
         function LogStyledMessage(message, style = 'color: #FFDF73; background-color: #454545') {
@@ -488,7 +504,7 @@
                 const reason = e && e.message ? e.message : String(e);
                 const state = e && e.code === 'PLUGINYG2_INIT_TIMEOUT' ? 'timeout' : 'failed';
                 SetPluginYG2InitState(state, reason);
-                console.error('[RobotArena.Platform] PluginYG2 SDK init failed: ' + reason);
+                console.error('[RobotArena.PluginYG2.Transport] SDK init failed: ' + reason);
             } finally {
                 if (timeoutHandle !== null)
                     clearTimeout(timeoutHandle);

@@ -40,7 +40,7 @@ The local lifecycle check is:
 node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
 ```
 
-The current licensed Unity release candidate passed the package gate: 20,965,688 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke verifies Unity loading plus the focus/music lifecycle. Its `/sdk.js` response is an inert placeholder with no `YaGames` implementation, so local results are not evidence of SDK initialization or Yandex lifecycle delivery. Direct callback testing is available only as the explicitly synthetic `--synthetic-platform-pause-cycles` diagnostic.
+The current licensed Unity release candidate passed the package gate: 21,042,211 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke verifies Unity loading plus the focus/music lifecycle. Its `/sdk.js` response is an inert placeholder with no `YaGames` implementation, so local results are not evidence of SDK initialization or Yandex lifecycle delivery. Direct callback testing is available only as the explicitly synthetic `--synthetic-platform-pause-cycles` diagnostic.
 
 The release command validates the official integration before building from
 `Tools/RobotArenaPluginYG2Integration.json`: PluginYG2 must match the pinned

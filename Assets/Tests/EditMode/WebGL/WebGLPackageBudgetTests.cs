@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using NUnit.Framework;
 using RobotArena.WebGL.Editor;
 using UnityEditor;
@@ -184,6 +186,53 @@ namespace RobotArena.WebGL.Editor.Tests
                 + "RequestingEnvironmentData(); SetEnvirData(); PluginYG2 v2.0092");
 
             Assert.That(errors, Is.Empty);
+        }
+
+        [Test]
+        public void Release_report_records_gate_failure_and_is_not_upload_ready()
+        {
+            string temporaryDirectory = Path.Combine(
+                Path.GetTempPath(),
+                "robot-arena-webgl-report-" + Guid.NewGuid().ToString("N"));
+            string reportPath = Path.Combine(temporaryDirectory, "release-report.json");
+            string missingArchivePath = Path.Combine(temporaryDirectory, "missing.zip");
+            Directory.CreateDirectory(temporaryDirectory);
+
+            try
+            {
+                MethodInfo writeReport = typeof(RobotArenaWebGLReleaseBuild).GetMethod(
+                    "WriteReport",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                Assert.That(writeReport, Is.Not.Null);
+
+                writeReport.Invoke(
+                    null,
+                    new object[]
+                    {
+                        reportPath,
+                        null,
+                        null,
+                        null,
+                        null,
+                        missingArchivePath,
+                        0,
+                        "configuration",
+                        new List<string> { "synthetic gate failure" },
+                        false
+                    });
+
+                string report = File.ReadAllText(reportPath);
+                Assert.That(report, Does.Contain("\"validationStage\": \"configuration\""));
+                Assert.That(report, Does.Contain("\"releaseIsUploadReady\": false"));
+                Assert.That(report, Does.Contain("synthetic gate failure"));
+            }
+            finally
+            {
+                if (Directory.Exists(temporaryDirectory))
+                {
+                    Directory.Delete(temporaryDirectory, recursive: true);
+                }
+            }
         }
 
         private void CreateArchive(params (string Name, int Size)[] entries)
