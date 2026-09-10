@@ -32,10 +32,10 @@ Use **Robot Arena → Build WebGL release package**. The command selects `PROJEC
 The local lifecycle check is:
 
 ```text
-node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
+node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --platform-pause-cycles 2 --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
 ```
 
-The current licensed Unity release candidate passed the package gate: 20,969,570 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke passed two focus cycles with no same-sequence audible overlap and no resumed intro starts.
+The current licensed Unity release candidate passed the package gate: 20,965,688 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke passed two PluginYG2 pause/resume cycles and three focus cycles with `consoleErrors: []`, `browserResourceErrors: []`, no same-sequence audible overlap, no loop starts during platform pause, and no resumed intro starts. The local smoke server supplies an explicit guest-only `/sdk.js` stub and a `204` favicon response; the hosted Yandex draft still uses the real SDK endpoint.
 
 The remaining production gate is the Yandex Games draft smoke in issue #38. It must confirm SDK/environment delivery, guest behavior, title-menu readiness, pause/resume, and the same music invariants in the hosted draft. The migration parent issue remains open until that human-controlled check is recorded.
 

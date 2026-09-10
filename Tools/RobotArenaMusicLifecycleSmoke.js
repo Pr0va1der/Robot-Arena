@@ -21,6 +21,7 @@ const DEFAULT_POST_RESUME_MS = 20_000;
 // still useful for the smoke test, while weapon and UI effects are much shorter.
 const DEFAULT_MINIMUM_MUSIC_BUFFER_SECONDS = 5;
 const CONTEXT_TIME_TOLERANCE_SECONDS = 0.05;
+const LOCAL_GUEST_SDK_STUB = 'window.YaGames = window.YaGames || {};\n';
 
 function isFiniteNumber(value) {
   return value !== null && value !== undefined && Number.isFinite(Number(value));
@@ -170,9 +171,22 @@ function analyzeMusicTrace(events, options = {}) {
       lostAt: Number(options.focusLostAt),
       restoredAt: Number(options.focusRestoredAt),
     }].filter(window => Number.isFinite(window.lostAt) && Number.isFinite(window.restoredAt));
+  const configuredPlatformPauseWindows = Array.isArray(options.platformPauseWindows)
+    ? options.platformPauseWindows
+    : [];
+  const platformPauseWindows = configuredPlatformPauseWindows
+    .map(window => ({
+      ...window,
+      pausedAt: Number(window.pausedAt),
+      resumedAt: Number(window.resumedAt),
+    }))
+    .filter(window => Number.isFinite(window.pausedAt) && Number.isFinite(window.resumedAt));
   const loopStartsDuringFocus = loopStarts.filter(event =>
     focusWindows.some(window =>
       Number(event.wallTime) >= window.lostAt && Number(event.wallTime) <= window.restoredAt));
+  const loopStartsDuringPlatformPause = loopStarts.filter(event =>
+    platformPauseWindows.some(window =>
+      Number(event.wallTime) >= window.pausedAt && Number(event.wallTime) <= window.resumedAt));
   const earlyLoopStarts = [];
   const eventOrder = new Map(trace.map((event, index) => [event, index]));
 
@@ -247,6 +261,8 @@ function analyzeMusicTrace(events, options = {}) {
     resumedLoopStarts,
     focusWindows,
     loopStartsDuringFocus,
+    platformPauseWindows,
+    loopStartsDuringPlatformPause,
     earlyLoopStarts,
     postLoopIntroStarts,
   };
@@ -293,6 +309,14 @@ function assertMusicLifecycle(result, options = {}) {
       ` [${result.loopStartsDuringFocus.map(event =>
         `id=${event.id},context=${getEventContextTime(event)},offset=${event.offset},wall=${event.wallTime}`).join('; ')}]` +
       ` windows=${result.focusWindows.map(window => `${window.lostAt}-${window.restoredAt}`).join(',')}`);
+  }
+
+  if (result.loopStartsDuringPlatformPause.length > 0) {
+    problems.push(
+      `music loop starts during PluginYG2 platform pause (${result.loopStartsDuringPlatformPause.length})` +
+      ` [${result.loopStartsDuringPlatformPause.map(event =>
+        `id=${event.id},context=${getEventContextTime(event)},offset=${event.offset},wall=${event.wallTime}`).join('; ')}]` +
+      ` windows=${result.platformPauseWindows.map(window => `${window.pausedAt}-${window.resumedAt}`).join(',')}`);
   }
 
   if (result.earlyLoopStarts.length > 0) {
@@ -428,7 +452,7 @@ async function waitFor(predicate, timeoutMs, description, intervalMs = 250) {
   while (Date.now() < deadline) {
     try {
       if (await predicate()) {
-        return;
+        return true;
       }
     } catch (error) {
       lastError = error;
@@ -504,6 +528,28 @@ function createStaticServer(buildDirectory) {
 
       if (!fs.existsSync(filePath) && fs.existsSync(filePath + '.br')) {
         filePath += '.br';
+      }
+
+      if (requestedPath === 'sdk.js' && !fs.existsSync(filePath)) {
+        const body = Buffer.from(LOCAL_GUEST_SDK_STUB, 'utf8');
+        response.writeHead(200, {
+          'Cache-Control': 'no-store',
+          'Content-Length': body.length,
+          'Content-Type': 'application/javascript; charset=utf-8',
+        });
+        if (request.method === 'HEAD') {
+          response.end();
+          return;
+        }
+
+        response.end(body);
+        return;
+      }
+
+      if (requestedPath === 'favicon.ico' && !fs.existsSync(filePath)) {
+        response.writeHead(204, { 'Cache-Control': 'no-store' });
+        response.end();
+        return;
       }
 
       const stat = await fs.promises.stat(filePath);
@@ -607,17 +653,66 @@ class CdpConnection {
     this.nextId = 1;
     this.pending = new Map();
     this.consoleMessages = [];
+    this.networkRequests = new Map();
+    this.resourceErrors = [];
+    this.logEntries = [];
 
     socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data));
+      const sessionId = message.sessionId;
+      const requestKey = `${sessionId || ''}:${message.params?.requestId || ''}`;
+      if (message.method === 'Network.requestWillBeSent') {
+        this.networkRequests.set(requestKey, message.params.request.url);
+        return;
+      }
+
+      if (message.method === 'Network.responseReceived') {
+        const response = message.params.response;
+        if (response && Number(response.status) >= 400) {
+          this.resourceErrors.push({
+            sessionId,
+            source: 'network',
+            status: response.status,
+            text: `${response.status} ${response.statusText || ''}`.trim(),
+            url: response.url,
+          });
+        }
+        return;
+      }
+
+      if (message.method === 'Network.loadingFailed') {
+        if (!message.params.canceled) {
+          this.resourceErrors.push({
+            sessionId,
+            source: 'network',
+            text: message.params.errorText || 'network loading failed',
+            url: this.networkRequests.get(requestKey) || '',
+          });
+        }
+        return;
+      }
+
+      if (message.method === 'Log.entryAdded') {
+        const entry = message.params.entry || {};
+        this.logEntries.push({
+          sessionId,
+          source: entry.source,
+          level: entry.level,
+          text: entry.text || '',
+          url: entry.url || '',
+        });
+        return;
+      }
+
       if (message.method === 'Runtime.consoleAPICalled') {
         const text = (message.params?.args || [])
           .map(argument => argument.value ?? argument.unserializableValue ?? argument.description ?? '')
           .join(' ');
         this.consoleMessages.push({
-          sessionId: message.sessionId,
+          sessionId,
           type: message.params?.type,
           text,
+          wallTime: Date.now(),
         });
         return;
       }
@@ -665,6 +760,15 @@ class CdpConnection {
 
   getConsoleMessages(sessionId) {
     return this.consoleMessages.filter(message => message.sessionId === sessionId);
+  }
+
+  getResourceErrors(sessionId) {
+    return this.resourceErrors.filter(error => error.sessionId === sessionId);
+  }
+
+  getLogErrors(sessionId) {
+    return this.logEntries.filter(entry =>
+      entry.sessionId === sessionId && entry.level === 'error');
   }
 }
 
@@ -827,6 +931,24 @@ function getConsoleErrors(cdp, sessionId) {
     .map(message => message.text);
 }
 
+function getBrowserResourceErrors(cdp, sessionId) {
+  const networkErrors = cdp.getResourceErrors(sessionId)
+    .map(error => `${error.text}${error.url ? ` (${error.url})` : ''}`);
+  const logErrors = cdp.getLogErrors(sessionId)
+    .map(entry => `${entry.text}${entry.url ? ` (${entry.url})` : ''}`);
+  return [...networkErrors, ...logErrors];
+}
+
+function hasMusicPauseDiagnostic(cdp, sessionId, isPaused, sinceWallTime) {
+  const expectedState = `audioPaused=${isPaused ? 'True' : 'False'}`;
+  return cdp.getConsoleMessages(sessionId).some(message =>
+    message.type === 'log' &&
+    message.wallTime >= sinceWallTime &&
+    message.text.includes('[RobotArena.Music]') &&
+    message.text.includes(expectedState) &&
+    (isPaused ? message.text.includes('activePauseSources=Platform') : true));
+}
+
 async function waitForMusicIntro(cdp, sessionId, timeoutMs) {
   try {
     await waitFor(
@@ -931,6 +1053,56 @@ async function runFocusCycle(
   return { lostAt, restoredAt };
 }
 
+async function runPlatformPauseCycle(
+  cdp,
+  page,
+  pauseDurationMs,
+  resumeSettleMs) {
+  const pausedAt = Date.now();
+  const pauseDispatched = await evaluate(cdp, page.sessionId, `(() => {
+    if (typeof PauseCallback !== 'function' || typeof YG2Instance !== 'function') {
+      return false;
+    }
+
+    PauseCallback();
+    return true;
+  })()`);
+  if (!pauseDispatched) {
+    throw new Error('PluginYG2 template pause callback is unavailable');
+  }
+
+  const pauseDiagnosticObserved = await waitFor(
+    async () => hasMusicPauseDiagnostic(cdp, page.sessionId, true, pausedAt),
+    Math.max(5_000, resumeSettleMs + 1_000),
+    'PluginYG2 platform pause propagation');
+  await delay(pauseDurationMs);
+
+  const resumedAt = Date.now();
+  const resumeDispatched = await evaluate(cdp, page.sessionId, `(() => {
+    if (typeof ResumeCallback !== 'function' || typeof YG2Instance !== 'function') {
+      return false;
+    }
+
+    ResumeCallback();
+    return true;
+  })()`);
+  if (!resumeDispatched) {
+    throw new Error('PluginYG2 template resume callback is unavailable');
+  }
+
+  const resumeDiagnosticObserved = await waitFor(
+    async () => hasMusicPauseDiagnostic(cdp, page.sessionId, false, resumedAt),
+    Math.max(5_000, resumeSettleMs + 1_000),
+    'PluginYG2 platform resume propagation');
+  await delay(resumeSettleMs);
+  return {
+    pausedAt,
+    resumedAt,
+    pauseDiagnosticObserved,
+    resumeDiagnosticObserved,
+  };
+}
+
 function assertSemanticModeTransition(result) {
   const firstIntro = result.introStarts[0];
   const firstLoop = result.initialLoopStarts[0];
@@ -983,6 +1155,12 @@ async function runMusicLifecycleSmoke(options = {}) {
     : options.postResumeMs;
   const focusCycles = options.focusCycles === undefined ? 2 : options.focusCycles;
   const enterSession = options.enterSession === true;
+  const platformPauseCycles = options.platformPauseCycles === undefined
+    ? (enterSession ? 2 : 0)
+    : options.platformPauseCycles;
+  if (platformPauseCycles > 0 && !enterSession) {
+    throw new Error('--platform-pause-cycles requires --enter-session');
+  }
   const coverLeadWindow = options.coverLeadWindow === true;
   const coverCombatIntro = options.coverCombatIntro === true;
   if (coverCombatIntro && !enterSession) {
@@ -1007,6 +1185,8 @@ async function runMusicLifecycleSmoke(options = {}) {
     page = await createPage(cdp);
     await cdp.send('Page.enable', {}, page.sessionId);
     await cdp.send('Runtime.enable', {}, page.sessionId);
+    await cdp.send('Network.enable', {}, page.sessionId);
+    await cdp.send('Log.enable', {}, page.sessionId);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 1280,
       height: 720,
@@ -1034,7 +1214,9 @@ async function runMusicLifecycleSmoke(options = {}) {
         .slice(-20)
         .map(message => `${message.type || 'log'}: ${message.text}`)
         .join(' | ');
-      throw new Error(`${error.message}; browser console=[${consoleMessages}]`);
+      const resourceErrors = getBrowserResourceErrors(cdp, page.sessionId).join(' | ');
+      throw new Error(`${error.message}; browser console=[${consoleMessages}]; ` +
+        `browser resources=[${resourceErrors}]`);
     }
 
     if (enterSession) {
@@ -1089,6 +1271,15 @@ async function runMusicLifecycleSmoke(options = {}) {
       await waitForMusicLoopCount(cdp, page.sessionId, enterSession ? 2 : 1, postResumeMs);
     }
 
+    const platformPauseWindows = [];
+    for (let cycle = 0; cycle < platformPauseCycles; cycle++) {
+      platformPauseWindows.push(await runPlatformPauseCycle(
+        cdp,
+        page,
+        focusPauseMs,
+        resumeSettleMs));
+    }
+
     for (let cycle = 0; cycle < focusCycles; cycle++) {
       focusWindows.push(await runFocusCycle(
         cdp,
@@ -1103,10 +1294,15 @@ async function runMusicLifecycleSmoke(options = {}) {
     if (consoleErrors.length > 0) {
       throw new Error(`browser console errors: ${consoleErrors.join(' | ')}`);
     }
+    const browserResourceErrors = getBrowserResourceErrors(cdp, page.sessionId);
+    if (browserResourceErrors.length > 0) {
+      throw new Error(`browser resource errors: ${browserResourceErrors.join(' | ')}`);
+    }
     const analysis = analyzeMusicTrace(trace.events, {
       focusLostAt,
       focusRestoredAt,
       focusWindows,
+      platformPauseWindows,
     });
     assertMusicLifecycle(analysis, {
       expectedLoopStarts: enterSession ? 2 : 1,
@@ -1120,8 +1316,10 @@ async function runMusicLifecycleSmoke(options = {}) {
       focusLostAt,
       focusRestoredAt,
       focusWindows,
+      platformPauseWindows,
       enterSession,
       consoleErrors,
+      browserResourceErrors,
       ...analysis,
     };
   } finally {
@@ -1178,6 +1376,7 @@ function parseArguments(argumentsList) {
       ['--resume-settle-ms', 'resumeSettleMs'],
       ['--post-resume-ms', 'postResumeMs'],
       ['--focus-cycles', 'focusCycles'],
+      ['--platform-pause-cycles', 'platformPauseCycles'],
       ['--session-load-ms', 'sessionLoadMs'],
       ['--output', 'outputPath'],
     ]);
@@ -1192,7 +1391,9 @@ function parseArguments(argumentsList) {
 
     const value = argumentsList[index];
     options[optionName] = optionName.endsWith('Ms') ||
-        optionName === 'waitMs' || optionName === 'focusCycles'
+        optionName === 'waitMs' ||
+        optionName === 'focusCycles' ||
+        optionName === 'platformPauseCycles'
       ? Number(value)
       : value;
   }
@@ -1212,6 +1413,7 @@ function printHelp() {
     '--resume-settle-ms <ms> Delay after focus restoration before next cycle',
     '--post-resume-ms <ms>    Time to observe after focus restoration',
     '--focus-cycles <count>   Additional focus cycles after the first loop',
+    '--platform-pause-cycles <count>  PluginYG2 pause/resume cycles (requires --enter-session)',
     '--session-load-ms <ms>   Delay used when entering SampleScene',
     '--enter-session          Enter SampleScene before granting audio permission',
     '--cover-lead-window      Focus loss immediately after the audio gesture',

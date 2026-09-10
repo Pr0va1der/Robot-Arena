@@ -302,6 +302,44 @@ test('serves Brotli-compressed Unity assets at their logical URL', async () => {
   }
 });
 
+test('serves an explicit local guest SDK stub for the PluginYG2 template', async () => {
+  const buildDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'robot-arena-music-sdk-server-'));
+  const staticServer = await createStaticServer(buildDirectory);
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${staticServer.port}/sdk.js`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/javascript; charset=utf-8');
+    assert.match(await response.text(), /window\.YaGames/);
+
+    const faviconResponse = await fetch(
+      `http://127.0.0.1:${staticServer.port}/favicon.ico`);
+    assert.equal(faviconResponse.status, 204);
+  } finally {
+    await new Promise(resolve => staticServer.server.close(resolve));
+    fs.rmSync(buildDirectory, { recursive: true, force: true });
+  }
+});
+
+test('rejects a music loop that starts during a PluginYG2 platform pause', () => {
+  const result = analyzeMusicTrace(createTrace(11), {
+    platformPauseWindows: [{ pausedAt: 900, resumedAt: 3500 }],
+  });
+
+  assert.equal(result.loopStartsDuringPlatformPause.length, 0);
+
+  const pausedTrace = createTrace(3);
+  const pausedResult = analyzeMusicTrace(pausedTrace, {
+    platformPauseWindows: [{ pausedAt: 2500, resumedAt: 3500 }],
+  });
+  assert.equal(pausedResult.loopStartsDuringPlatformPause.length, 1);
+  assert.throws(
+    () => assertMusicLifecycle(pausedResult),
+    /PluginYG2 platform pause/);
+});
+
 test('allows a WebGL loop source to resume from a saved offset', () => {
   const trace = createTrace(11);
   trace.push(

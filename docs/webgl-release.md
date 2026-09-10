@@ -24,16 +24,16 @@ errors.
 After creating a fresh release package, run the browser lifecycle check from the repository root:
 
 ```text
-node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --output Build/WebGL/RobotArenaMusicLifecycleSmoke.json
+node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --platform-pause-cycles 2 --output Build/WebGL/RobotArenaMusicLifecycleSmoke.json
 ```
 
-The check requires Node 22 or newer and Microsoft Edge. It serves the Brotli package over a local HTTP server, enables audio with a real pointer gesture, switches to a background tab during the first calm intro, restores the game focus, and instruments WebAudio buffer starts and stops. It fails on same-sequence audible overlap, more than one authoritative zero-offset loop for a semantic sequence, a loop start during focus loss, or a loop start before the resumed intro has finished. WebGL backend restarts with a positive resume offset are retained as evidence and are not counted as duplicate sequence starts. With `--enter-session`, distinct WebAudio buffer identities also verify that the initial calm cue reaches its loop before the combat cue begins. The JSON output retains the machine-readable trace for release evidence.
+The check requires Node 22 or newer and Microsoft Edge. It serves the Brotli package over a local HTTP server, enables audio with a real pointer gesture, routes two real PluginYG2 `PauseCallback`/`ResumeCallback` cycles through Unity, switches to a background tab during the first calm intro, restores the game focus, and instruments WebAudio buffer starts and stops. It fails on console or resource errors, same-sequence audible overlap, more than one authoritative zero-offset loop for a semantic sequence, a loop start during focus loss or platform pause, or a loop start before the resumed intro has finished. WebGL backend restarts with a positive resume offset are retained as evidence and are not counted as duplicate sequence starts. With `--enter-session`, distinct WebAudio buffer identities also verify that the initial calm cue reaches its loop before the combat cue begins. The JSON output retains the machine-readable trace and pause windows for release evidence.
 
 To cover the pre-start lead-window and the combat intro in the same local run,
 use the optional timing matrix:
 
 ```text
-node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --cover-lead-window --cover-combat-intro --focus-cycles 1 --output Build/WebGL/RobotArenaMusicLifecycleSmoke-matrix.json
+node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --platform-pause-cycles 2 --cover-lead-window --cover-combat-intro --focus-cycles 1 --output Build/WebGL/RobotArenaMusicLifecycleSmoke-matrix.json
 ```
 
 The lead-window option moves the first focus loss immediately after the audio
