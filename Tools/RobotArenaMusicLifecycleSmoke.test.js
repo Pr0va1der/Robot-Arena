@@ -83,6 +83,40 @@ test('rejects a loop that starts before the resumed intro ends', () => {
     /starts before the intro finishes/);
 });
 
+test('rejects a loop scheduled from the requested time before a delayed intro ends', () => {
+  const result = analyzeMusicTrace([
+    {
+      type: 'start',
+      id: 1,
+      wallTime: 1000,
+      contextTime: 1,
+      when: 4,
+      offset: 0,
+      duration: null,
+      bufferId: 1,
+      bufferDuration: 10,
+      loop: false,
+    },
+    {
+      type: 'start',
+      id: 2,
+      wallTime: 13000,
+      contextTime: 13,
+      when: 13,
+      offset: 0,
+      duration: null,
+      bufferId: 2,
+      bufferDuration: 20,
+      loop: true,
+    },
+  ]);
+
+  assert.equal(result.earlyLoopStarts.length, 1);
+  assert.throws(
+    () => assertMusicLifecycle(result),
+    /starts before the intro finishes/);
+});
+
 test('classifies short music clips and ignores immediately stopped WebAudio nodes', () => {
   const result = analyzeMusicTrace([
     {
@@ -189,6 +223,53 @@ test('can validate one loop for each sequential semantic music mode', () => {
   const result = analyzeMusicTrace(trace);
 
   assert.equal(result.loopStarts.length, 2);
+  assert.equal(result.postLoopIntroStarts.length, 1);
+  assert.doesNotThrow(() => assertMusicLifecycle(result, { expectedLoopStarts: 2 }));
+  assert.doesNotThrow(() => assertSemanticModeTransition(result));
+});
+
+test('does not count a resumed post-loop intro as a semantic transition', () => {
+  const trace = createTrace(11);
+  trace.push(
+    {
+      type: 'start',
+      id: 5,
+      wallTime: 11000,
+      contextTime: 11,
+      when: 11,
+      offset: 0,
+      duration: null,
+      bufferId: 3,
+      bufferDuration: 7,
+      loop: false,
+    },
+    {
+      type: 'start',
+      id: 6,
+      wallTime: 18500,
+      contextTime: 18.5,
+      when: 18.5,
+      offset: 0,
+      duration: null,
+      bufferId: 4,
+      bufferDuration: 7,
+      loop: true,
+    },
+    {
+      type: 'start',
+      id: 7,
+      wallTime: 19000,
+      contextTime: 19,
+      when: 19,
+      offset: 1,
+      duration: null,
+      bufferId: 3,
+      bufferDuration: 7,
+      loop: false,
+    });
+
+  const result = analyzeMusicTrace(trace);
+
   assert.equal(result.postLoopIntroStarts.length, 1);
   assert.doesNotThrow(() => assertMusicLifecycle(result, { expectedLoopStarts: 2 }));
   assert.doesNotThrow(() => assertSemanticModeTransition(result));

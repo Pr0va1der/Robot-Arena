@@ -7,6 +7,7 @@ public class PauseMenu : MonoBehaviour
 {
     public static bool GameIsPaused { get; private set; }
     public static bool AudioIsPaused { get; private set; }
+    public static PauseSource CurrentActivePauseSources { get; private set; }
     public static bool PointerLockGestureConsumed { get; private set; }
 
     private readonly PauseCoordinator pauseCoordinator = new PauseCoordinator();
@@ -99,6 +100,7 @@ public class PauseMenu : MonoBehaviour
     public void SetPauseSource(PauseSource source, bool isActive)
     {
         pauseCoordinator.SetSource(source, isActive);
+        CurrentActivePauseSources = pauseCoordinator.ActiveSources;
     }
 
     public void Resume()
@@ -160,6 +162,7 @@ public class PauseMenu : MonoBehaviour
         bool gameplayPaused = pauseCoordinator.IsGameplayPaused;
         GameIsPaused = gameplayPaused;
         AudioIsPaused = pauseCoordinator.IsAudioPaused;
+        CurrentActivePauseSources = pauseCoordinator.ActiveSources;
         Time.timeScale = gameplayPaused ? 0f : 1f;
         AudioListener.pause = AudioIsPaused;
 
@@ -225,6 +228,7 @@ public class PauseMenu : MonoBehaviour
         pauseCoordinator.PauseStateChanged -= OnPauseStateChanged;
         GameIsPaused = false;
         AudioIsPaused = false;
+        CurrentActivePauseSources = PauseSource.None;
         PointerLockGestureConsumed = false;
         Time.timeScale = 1f;
         AudioListener.pause = false;

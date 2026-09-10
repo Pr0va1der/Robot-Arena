@@ -10,7 +10,12 @@ public sealed class GameMusicRuntime : MonoBehaviour
 
     private const double DeathScheduleLeadSeconds = 0.05;
     private const float ResumeSourceStallToleranceSeconds = 0.05f;
-    private const float SourceEndObservationToleranceSeconds = 0.05f;
+    // WebGL can report a natural AudioSource stop after its cursor has fallen
+    // several frames behind the WebAudio node, so the timer and cursor need a
+    // small backend-specific completion window.
+    private const float NaturalIntroStopTimingToleranceSeconds = 0.5f;
+    private const float IntroEndObservationToleranceSeconds = 0.75f;
+    private const float NaturalIntroStopTimingToleranceRatio = 0.1f;
 
     public static GameMusicRuntime Instance { get; private set; }
     private static int activeOwnerCount;
@@ -23,6 +28,7 @@ public sealed class GameMusicRuntime : MonoBehaviour
     private BotCombatRuntime combatRuntime;
     private BotSpawnManager sessionManager;
     private PlayerHP playerHealth;
+    private PauseMenu pauseMenu;
     private bool applicationFocusLost;
     private bool applicationPaused;
     private bool musicWasPaused;
@@ -150,7 +156,7 @@ public sealed class GameMusicRuntime : MonoBehaviour
         applicationFocusLost = !hasFocus;
         if (!hasFocus)
         {
-            discardNextUnpausedDelta = true;
+            MarkLifecyclePauseBoundary();
         }
 
         ApplyFallbackListenerPause();
@@ -161,7 +167,7 @@ public sealed class GameMusicRuntime : MonoBehaviour
         applicationPaused = isPaused;
         if (isPaused)
         {
-            discardNextUnpausedDelta = true;
+            MarkLifecyclePauseBoundary();
         }
 
         ApplyFallbackListenerPause();
@@ -175,6 +181,8 @@ public sealed class GameMusicRuntime : MonoBehaviour
 
     private void BindSceneSystems()
     {
+        pauseMenu = FindObjectOfType<PauseMenu>();
+
         if (sessionManager != null)
         {
             sessionManager.SessionStateChanged -= OnSessionStateChanged;
@@ -228,12 +236,12 @@ public sealed class GameMusicRuntime : MonoBehaviour
         switch (cue)
         {
             case MusicCue.CalmIntro:
-                StartMode(library?.CalmIntro, library?.CalmLoop);
+                StartMode(library?.CalmIntro, library?.CalmLoop, MusicMode.Calm);
                 calmIntroPlaying = true;
                 break;
             case MusicCue.CombatIntro:
                 StopCalmIntroPlayback();
-                StartMode(library?.CombatIntro, library?.CombatLoop);
+                StartMode(library?.CombatIntro, library?.CombatLoop, MusicMode.Combat);
                 break;
             case MusicCue.Death:
                 StopCalmIntroPlayback();
@@ -247,6 +255,14 @@ public sealed class GameMusicRuntime : MonoBehaviour
     }
 
     private void StartMode(AudioClip intro, AudioClip loop)
+    {
+        MusicMode semanticMode = activeCue == MusicCue.CombatIntro
+            ? MusicMode.Combat
+            : MusicMode.Calm;
+        StartMode(intro, loop, semanticMode);
+    }
+
+    private void StartMode(AudioClip intro, AudioClip loop, MusicMode semanticMode)
     {
         if (intro == null || loop == null)
         {
@@ -268,7 +284,7 @@ public sealed class GameMusicRuntime : MonoBehaviour
             groups[activeGroup].FadeTo(0f, CrossfadeDuration);
         }
 
-        group.StartSequence(intro, loop);
+        group.StartSequence(intro, loop, semanticMode);
         group.FadeTo(1f, CrossfadeDuration);
         activeGroup = nextGroup;
     }
@@ -346,8 +362,14 @@ public sealed class GameMusicRuntime : MonoBehaviour
         int activeSequenceAudibleSourceCount = 0;
         MusicPlaybackPhase playbackPhase = MusicPlaybackPhase.Silent;
         int fadingGroupMask = 0;
+        int fadingSemanticModeMask = 0;
         int fadingGroupIndex = -1;
         bool intentionalCrossfade = false;
+        MusicMode targetSemanticMode = deathPlaying
+            ? MusicMode.Death
+            : activeGroup >= 0
+                ? groups[activeGroup].SemanticMode
+                : MusicMode.Silent;
 
         if (groups != null)
         {
@@ -358,6 +380,10 @@ public sealed class GameMusicRuntime : MonoBehaviour
                 if (groups[i].IsFadingOut)
                 {
                     fadingGroupMask |= 1 << i;
+                    if (groups[i].SemanticMode != MusicMode.Silent)
+                    {
+                        fadingSemanticModeMask |= 1 << (int)groups[i].SemanticMode;
+                    }
                     if (fadingGroupIndex < 0)
                     {
                         fadingGroupIndex = i;
@@ -370,7 +396,9 @@ public sealed class GameMusicRuntime : MonoBehaviour
                 }
                 else if ((activeGroup >= 0 || deathPlaying) &&
                          groupAudibleSourceCount > 0 &&
-                         groups[i].IsFadingOut)
+                         groups[i].IsFadingOut &&
+                         groups[i].SemanticMode != MusicMode.Silent &&
+                         groups[i].SemanticMode != targetSemanticMode)
                 {
                     intentionalCrossfade = true;
                 }
@@ -394,10 +422,12 @@ public sealed class GameMusicRuntime : MonoBehaviour
             activeGroup,
             fadingGroupIndex,
             fadingGroupMask,
+            fadingSemanticModeMask,
             audibleSourceCount,
             activeSequenceAudibleSourceCount,
             intentionalCrossfade,
-            isAudioPaused);
+            isAudioPaused,
+            GetActivePauseSources());
     }
 
     private void PublishDiagnostics()
@@ -520,6 +550,36 @@ public sealed class GameMusicRuntime : MonoBehaviour
         }
     }
 
+    private PauseSource GetActivePauseSources()
+    {
+        if (pauseMenu == null)
+        {
+            pauseMenu = FindObjectOfType<PauseMenu>();
+        }
+
+        PauseSource sources = PauseMenu.CurrentActivePauseSources;
+        if (pauseMenu != null)
+        {
+            sources |= pauseMenu.ActivePauseSources;
+        }
+        if (applicationFocusLost)
+        {
+            sources |= PauseSource.Focus;
+        }
+
+        if (applicationPaused)
+        {
+            sources |= PauseSource.Platform;
+        }
+
+        return sources;
+    }
+
+    private void MarkLifecyclePauseBoundary()
+    {
+        discardNextUnpausedDelta = true;
+    }
+
     private AudioSource CreateAudioSource(string name)
     {
         GameObject sourceObject = new GameObject(name);
@@ -617,6 +677,11 @@ public sealed class GameMusicRuntime : MonoBehaviour
         private float fadeElapsed;
         private float fadeDuration;
         private bool needsIntroResumeConfirmation;
+        private float maxObservedIntroPositionSeconds;
+        private int maxObservedIntroTimeSamples;
+        private bool introPlaybackObserved;
+        private bool introCompletionObserved;
+        private MusicMode semanticMode = MusicMode.Silent;
 
         public MusicPlaybackGroup(AudioSource introSource)
         {
@@ -629,9 +694,10 @@ public sealed class GameMusicRuntime : MonoBehaviour
         public bool Active { get; private set; }
         public float Gain { get; private set; }
         public MusicPlaybackPhase PlaybackPhase => sequence.Phase;
+        public MusicMode SemanticMode => semanticMode;
         public bool IsFadingOut => Active && fadeTarget <= 0f && Gain > 0f;
 
-        public void StartSequence(AudioClip intro, AudioClip loop)
+        public void StartSequence(AudioClip intro, AudioClip loop, MusicMode semanticMode)
         {
             introSource.Stop();
             loopSource.Stop();
@@ -639,6 +705,7 @@ public sealed class GameMusicRuntime : MonoBehaviour
             introSource.loop = false;
             loopSource.clip = loop;
             loopSource.loop = true;
+            this.semanticMode = semanticMode;
             sequence.QueueIntro(intro.length);
             if (sequence.Phase == MusicPlaybackPhase.Loop)
             {
@@ -655,6 +722,10 @@ public sealed class GameMusicRuntime : MonoBehaviour
             fadeElapsed = 0f;
             fadeDuration = 0f;
             needsIntroResumeConfirmation = false;
+            maxObservedIntroPositionSeconds = 0f;
+            maxObservedIntroTimeSamples = 0;
+            introPlaybackObserved = false;
+            introCompletionObserved = false;
             Active = true;
         }
 
@@ -667,11 +738,15 @@ public sealed class GameMusicRuntime : MonoBehaviour
 
             if (sequence.Phase == MusicPlaybackPhase.WaitingForIntro)
             {
-                if (!introSource.isPlaying || !sequence.MarkIntroStarted())
+                if (isPaused ||
+                    !introSource.isPlaying ||
+                    !sequence.MarkIntroStarted(GetIntroPositionSeconds()))
                 {
                     return;
                 }
 
+                introPlaybackObserved = true;
+                ObserveIntroPosition();
                 return;
             }
 
@@ -693,6 +768,19 @@ public sealed class GameMusicRuntime : MonoBehaviour
             }
 
             needsIntroResumeConfirmation = false;
+            ObserveIntroPosition();
+            if (!introSource.isPlaying &&
+                !introCompletionObserved &&
+                sequence.IntroRemainingSeconds > GetNaturalIntroStopTimingToleranceSeconds())
+            {
+                // A browser lifecycle stop can arrive before OnApplicationFocus.
+                // Keep the sequence in Intro and wait for the source to resume;
+                // a source that was stopped permanently must never be promoted
+                // to the loop by the elapsed-time fallback.
+                needsIntroResumeConfirmation = true;
+                return;
+            }
+
             bool actualIntroComplete = IsIntroActuallyComplete();
             if (!sequence.Advance(elapsedSeconds, false, actualIntroComplete))
             {
@@ -705,17 +793,82 @@ public sealed class GameMusicRuntime : MonoBehaviour
 
         private bool IsIntroActuallyComplete()
         {
+            if (introSource.clip == null ||
+                !introPlaybackObserved)
+            {
+                return false;
+            }
+
+            // The timer only bounds how much active time remains. WebGL can
+            // keep isPlaying true for one frame at the exact clip boundary, so
+            // an observed last sample is also authoritative. An intro stopped
+            // early remains blocked above until the source is resumed.
+            return introCompletionObserved ||
+                (!introSource.isPlaying &&
+                 sequence.IntroRemainingSeconds <= GetNaturalIntroStopTimingToleranceSeconds());
+        }
+
+        private void ObserveIntroPosition()
+        {
+            if (introSource.clip == null)
+            {
+                return;
+            }
+
+            float positionSeconds = GetIntroPositionSeconds();
+            maxObservedIntroPositionSeconds = Mathf.Max(
+                maxObservedIntroPositionSeconds,
+                positionSeconds);
+            maxObservedIntroTimeSamples = Mathf.Max(
+                maxObservedIntroTimeSamples,
+                Mathf.Max(0, introSource.timeSamples));
+            if (HasReachedIntroEndPosition())
+            {
+                introCompletionObserved = true;
+            }
+        }
+
+        private float GetIntroPositionSeconds()
+        {
+            return introSource.clip == null
+                ? 0f
+                : Mathf.Clamp(introSource.time, 0f, introSource.clip.length);
+        }
+
+        private bool HasReachedIntroEndPosition()
+        {
             if (introSource.clip == null)
             {
                 return false;
             }
 
-            // Unity WebGL can keep the source marked as playing at the exact
-            // clip boundary, so position evidence uses a small observation
-            // tolerance. A stopped source is accepted only after the
-            // countdown anchored to its acknowledged start has elapsed.
-            return (!introSource.isPlaying && sequence.IntroRemainingSeconds <= 0f) ||
-                introSource.time >= introSource.clip.length - SourceEndObservationToleranceSeconds;
+            int lastSample = Mathf.Max(0, introSource.clip.samples - 1);
+            if (maxObservedIntroTimeSamples >= lastSample)
+            {
+                return true;
+            }
+
+            float oneSampleSeconds = introSource.clip.frequency > 0
+                ? 1f / introSource.clip.frequency
+                : 0f;
+            float observationTolerance = Mathf.Max(
+                oneSampleSeconds,
+                Mathf.Min(
+                    IntroEndObservationToleranceSeconds,
+                    introSource.clip.length * NaturalIntroStopTimingToleranceRatio));
+            return maxObservedIntroPositionSeconds >= introSource.clip.length - observationTolerance;
+        }
+
+        private float GetNaturalIntroStopTimingToleranceSeconds()
+        {
+            if (introSource.clip == null)
+            {
+                return 0f;
+            }
+
+            return Mathf.Min(
+                NaturalIntroStopTimingToleranceSeconds,
+                introSource.clip.length * NaturalIntroStopTimingToleranceRatio);
         }
 
         public int GetAudibleSourceCount(bool isAudioPaused)
@@ -789,6 +942,11 @@ public sealed class GameMusicRuntime : MonoBehaviour
             loopSource.volume = 0f;
             Gain = 0f;
             needsIntroResumeConfirmation = false;
+            maxObservedIntroPositionSeconds = 0f;
+            maxObservedIntroTimeSamples = 0;
+            introPlaybackObserved = false;
+            introCompletionObserved = false;
+            semanticMode = MusicMode.Silent;
             Active = false;
         }
 

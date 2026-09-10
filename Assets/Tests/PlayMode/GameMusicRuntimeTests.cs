@@ -73,7 +73,10 @@ namespace RobotArena.Session.Tests
             AudioClip testLoop = AudioClip.Create("MusicRuntimeTestLoop", 480, 1, 48000, false);
             MethodInfo startMode = runtimeType.GetMethod(
                 "StartMode",
-                BindingFlags.Instance | BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                null,
+                new[] { typeof(AudioClip), typeof(AudioClip) },
+                null);
             MethodInfo requestCue = runtimeType.GetMethod(
                 "OnCueRequested",
                 BindingFlags.Instance | BindingFlags.NonPublic);
@@ -96,11 +99,17 @@ namespace RobotArena.Session.Tests
                 MethodInfo setPauseSource = pauseMenuType.GetMethod("SetPauseSource");
                 setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Focus, true });
                 setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Advertisement, true });
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Platform, true });
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.User, true });
                 yield return null;
 
                 diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
                 Assert.That(diagnostics.IsAudioPaused, Is.True);
                 Assert.That(diagnostics.PlaybackPhase, Is.EqualTo(MusicPlaybackPhase.Intro));
+                Assert.That(diagnostics.ActivePauseSources.HasFlag(PauseSource.Focus), Is.True);
+                Assert.That(diagnostics.ActivePauseSources.HasFlag(PauseSource.Advertisement), Is.True);
+                Assert.That(diagnostics.ActivePauseSources.HasFlag(PauseSource.Platform), Is.True);
+                Assert.That(diagnostics.ActivePauseSources.HasFlag(PauseSource.User), Is.True);
                 Assert.That(diagnostics.AudibleSourceCount, Is.Zero);
                 Assert.That(diagnostics.ActiveSequenceAudibleSourceCount, Is.Zero);
 
@@ -114,6 +123,16 @@ namespace RobotArena.Session.Tests
                 Assert.That(diagnostics.IsAudioPaused, Is.True);
 
                 setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Advertisement, false });
+                yield return null;
+                diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.IsAudioPaused, Is.True);
+
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Platform, false });
+                yield return null;
+                diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.IsAudioPaused, Is.True);
+
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.User, false });
                 yield return null;
                 focusLostField.SetValue(owner, false);
                 applicationPausedField.SetValue(owner, false);
@@ -130,6 +149,110 @@ namespace RobotArena.Session.Tests
             {
                 requestCue.Invoke(owner, new object[] { MusicCue.Silent });
                 activeCueField.SetValue(owner, MusicCue.None);
+                UnityEngine.Object.Destroy(testIntro);
+                UnityEngine.Object.Destroy(testLoop);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Early_stopped_intro_does_not_promote_to_loop_after_timer_expires()
+        {
+            Type runtimeType = Type.GetType("GameMusicRuntime, Assembly-CSharp", true);
+            Component existing = (Component)UnityEngine.Object.FindObjectOfType(runtimeType);
+            Component owner = (Component)runtimeType
+                .GetMethod("GetOrCreate", BindingFlags.Public | BindingFlags.Static)
+                .Invoke(null, null);
+            if (existing == null)
+            {
+                createdRuntime = owner;
+            }
+
+            GameObject pauseObject = new GameObject("MusicRuntimeEarlyStopCanvas");
+            createdPauseMenuObject = pauseObject;
+            Canvas canvas = pauseObject.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            pauseObject.AddComponent<CanvasScaler>();
+            pauseObject.AddComponent<GraphicRaycaster>();
+            Type pauseMenuType = Type.GetType("PauseMenu, Assembly-CSharp", true);
+            Component pauseMenu = pauseObject.AddComponent(pauseMenuType);
+            Behaviour desktopUi = (Behaviour)pauseObject.GetComponent(
+                Type.GetType("DesktopArenaUi, Assembly-CSharp", true));
+            if (desktopUi != null)
+            {
+                desktopUi.enabled = false;
+            }
+
+            AudioClip testIntro = AudioClip.Create("MusicRuntimeEarlyStopIntro", 48000, 1, 48000, false);
+            AudioClip testLoop = AudioClip.Create("MusicRuntimeEarlyStopLoop", 48000, 1, 48000, false);
+            MethodInfo startMode = runtimeType.GetMethod(
+                "StartMode",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                null,
+                new[] { typeof(AudioClip), typeof(AudioClip) },
+                null);
+            MethodInfo requestCue = runtimeType.GetMethod(
+                "OnCueRequested",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo groupsField = runtimeType.GetField(
+                "groups",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo activeGroupField = runtimeType.GetField(
+                "activeGroup",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            PropertyInfo diagnosticsProperty = runtimeType.GetProperty(
+                "Diagnostics",
+                BindingFlags.Public | BindingFlags.Instance);
+            FieldInfo audioPausedBackingField = pauseMenuType.GetField(
+                "<AudioIsPaused>k__BackingField",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            FieldInfo focusLostField = runtimeType.GetField(
+                "applicationFocusLost",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo applicationPausedField = runtimeType.GetField(
+                "applicationPaused",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            try
+            {
+                yield return null;
+                pauseMenuType.GetMethod("SetTutorialMode").Invoke(pauseMenu, new object[] { false });
+                audioPausedBackingField.SetValue(null, false);
+                focusLostField.SetValue(owner, false);
+                applicationPausedField.SetValue(owner, false);
+                AudioListener.pause = false;
+                yield return null;
+
+                startMode.Invoke(owner, new object[] { testIntro, testLoop });
+                yield return null;
+
+                Array groups = (Array)groupsField.GetValue(owner);
+                int activeGroup = (int)activeGroupField.GetValue(owner);
+                object group = groups.GetValue(activeGroup);
+                Type groupType = group.GetType();
+                AudioSource introSource = (AudioSource)groupType.GetField(
+                    "introSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic).GetValue(group);
+                AudioSource loopSource = (AudioSource)groupType.GetField(
+                    "loopSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic).GetValue(group);
+
+                Assert.That(introSource.isPlaying, Is.True);
+                yield return new WaitForSecondsRealtime(0.15f);
+                introSource.Stop();
+
+                yield return new WaitForSecondsRealtime(1.25f);
+
+                MusicRuntimeDiagnostics diagnostics =
+                    (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.PlaybackPhase, Is.EqualTo(MusicPlaybackPhase.Intro));
+                Assert.That(loopSource.isPlaying, Is.False);
+
+                requestCue.Invoke(owner, new object[] { MusicCue.Silent });
+                yield return new WaitForSecondsRealtime(0.6f);
+            }
+            finally
+            {
+                requestCue.Invoke(owner, new object[] { MusicCue.Silent });
                 UnityEngine.Object.Destroy(testIntro);
                 UnityEngine.Object.Destroy(testLoop);
             }
@@ -183,6 +306,7 @@ namespace RobotArena.Session.Tests
             Assert.That(diagnostics.ActiveGroupIndex, Is.EqualTo(-1));
             Assert.That(diagnostics.FadingGroupIndex, Is.EqualTo(-1));
             Assert.That(diagnostics.FadingGroupMask, Is.Zero);
+            Assert.That(diagnostics.FadingSemanticModeMask, Is.Zero);
             Assert.That(diagnostics.AudibleSourceCount, Is.Zero);
         }
 

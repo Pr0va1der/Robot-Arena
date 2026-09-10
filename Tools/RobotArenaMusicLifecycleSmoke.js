@@ -232,7 +232,8 @@ function analyzeMusicTrace(events, options = {}) {
       const introContextTime = getEventContextTime(event);
       return introOrder > firstLoopOrder &&
         (introContextTime > firstLoopContextTime + CONTEXT_TIME_TOLERANCE_SECONDS ||
-         Math.abs(introContextTime - firstLoopContextTime) <= CONTEXT_TIME_TOLERANCE_SECONDS);
+         Math.abs(introContextTime - firstLoopContextTime) <= CONTEXT_TIME_TOLERANCE_SECONDS) &&
+        (!isFiniteNumber(event.offset) || Number(event.offset) <= CONTEXT_TIME_TOLERANCE_SECONDS);
     });
 
   return {
@@ -261,10 +262,7 @@ function assertMusicLifecycle(result, options = {}) {
       `expected exactly ${expectedLoopSequences} authoritative music loop start(s), got ${result.initialLoopStarts.length}` +
       ` [${result.initialLoopStarts.map(event =>
         `id=${event.id},context=${getEventContextTime(event)},offset=${event.offset},wall=${event.wallTime}`).join('; ')}]`);
-    problems.push(`trace=${result.trace.map(event =>
-      `${event.type}#${event.id}@${getEventContextTime(event)}` +
-      `${event.loop === true ? ':loop' : ''}` +
-      `${event.offset === undefined ? '' : `:offset=${event.offset}`}`).join(',')}`);
+    problems.push(`trace=${formatMusicTrace(result.trace)}`);
   }
   const expectedPostLoopIntroStarts = Math.max(0, expectedLoopSequences - 1);
   if (result.postLoopIntroStarts.length !== expectedPostLoopIntroStarts) {
@@ -302,11 +300,7 @@ function assertMusicLifecycle(result, options = {}) {
       `music loop starts before the intro finishes (${result.earlyLoopStarts.length})` +
       ` [${result.earlyLoopStarts.map(item =>
         `loop=${getEventContextTime(item.loopStart)},intro=${getEventContextTime(item.precedingIntro)},introEnd=${item.introEndContextTime}`).join('; ')}]`);
-    problems.push(`trace=${result.trace.map(event =>
-      `${event.type}#${event.id}@${getEventContextTime(event)}` +
-      `${event.loop === true ? ':loop' : ''}` +
-      `${event.offset === undefined ? '' : `:offset=${event.offset}`}` +
-      `${event.bufferDuration === undefined ? '' : `:buffer=${event.bufferDuration}`}`).join(',')}`);
+    problems.push(`trace=${formatMusicTrace(result.trace, { includeBufferDuration: true })}`);
   }
 
   for (const introStart of result.resumedIntroStarts) {
@@ -321,6 +315,21 @@ function assertMusicLifecycle(result, options = {}) {
   }
 
   return true;
+}
+
+function formatMusicTrace(trace, options = {}) {
+  return trace.map(event => {
+    const details = [
+      `${event.type}#${event.id}@${getEventContextTime(event)}`,
+      event.loop === true ? ':loop' : '',
+      event.offset === undefined ? '' : `:offset=${event.offset}`,
+    ];
+    if (options.includeBufferDuration === true && event.bufferDuration !== undefined) {
+      details.push(`:buffer=${event.bufferDuration}`);
+    }
+
+    return details.join('');
+  }).join(',');
 }
 
 function createMusicInstrumentationSource() {
@@ -593,9 +602,22 @@ class CdpConnection {
     this.socket = socket;
     this.nextId = 1;
     this.pending = new Map();
+    this.consoleMessages = [];
 
     socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data));
+      if (message.method === 'Runtime.consoleAPICalled') {
+        const text = (message.params?.args || [])
+          .map(argument => argument.value ?? argument.unserializableValue ?? argument.description ?? '')
+          .join(' ');
+        this.consoleMessages.push({
+          sessionId: message.sessionId,
+          type: message.params?.type,
+          text,
+        });
+        return;
+      }
+
       if (message.id !== undefined) {
         const pending = this.pending.get(message.id);
         if (!pending) {
@@ -635,6 +657,10 @@ class CdpConnection {
 
   close() {
     this.socket.close();
+  }
+
+  getConsoleMessages(sessionId) {
+    return this.consoleMessages.filter(message => message.sessionId === sessionId);
   }
 }
 
@@ -777,6 +803,14 @@ async function summarizeMusicTrace(cdp, sessionId) {
       summary += ` error=${trace.error}`;
     }
 
+    const musicConsoleMessages = cdp.getConsoleMessages(sessionId)
+      .filter(message => message.text.includes('[RobotArena.Music]'))
+      .slice(-12)
+      .map(message => message.text);
+    if (musicConsoleMessages.length > 0) {
+      summary += ` console=[${musicConsoleMessages.join(' | ')}]`;
+    }
+
     return summary;
   } catch (error) {
     return `trace read failed: ${error.message}`;
@@ -843,6 +877,21 @@ async function waitForMusicLoopCount(cdp, sessionId, count, timeoutMs) {
       },
       timeoutMs,
       `${count} music loop start(s)`);
+  } catch (error) {
+    const traceSummary = await summarizeMusicTrace(cdp, sessionId);
+    throw new Error(`${error.message}; ${traceSummary}`);
+  }
+}
+
+async function waitForPostLoopIntro(cdp, sessionId, timeoutMs) {
+  try {
+    await waitFor(
+      async () => {
+        const trace = await readTrace(cdp, sessionId);
+        return analyzeMusicTrace(trace.events).postLoopIntroStarts.length > 0;
+      },
+      timeoutMs,
+      'combat intro start');
   } catch (error) {
     const traceSummary = await summarizeMusicTrace(cdp, sessionId);
     throw new Error(`${error.message}; ${traceSummary}`);
@@ -924,6 +973,11 @@ async function runMusicLifecycleSmoke(options = {}) {
     : options.postResumeMs;
   const focusCycles = options.focusCycles === undefined ? 2 : options.focusCycles;
   const enterSession = options.enterSession === true;
+  const coverLeadWindow = options.coverLeadWindow === true;
+  const coverCombatIntro = options.coverCombatIntro === true;
+  if (coverCombatIntro && !enterSession) {
+    throw new Error('--cover-combat-intro requires --enter-session');
+  }
   const sessionLoadMs = options.sessionLoadMs === undefined ? 1_500 : options.sessionLoadMs;
   const browserPath = resolveBrowserPath(options.browserPath);
   const staticServer = await createStaticServer(buildDirectory);
@@ -978,24 +1032,44 @@ async function runMusicLifecycleSmoke(options = {}) {
       await delay(sessionLoadMs);
     }
 
-    await dispatchUserGesture(cdp, page.sessionId);
-    await waitForMusicIntro(cdp, page.sessionId, waitMs);
-
-    await delay(options.beforeBlurMs === undefined ? 1_000 : options.beforeBlurMs);
     const background = await cdp.send('Target.createTarget', { url: 'about:blank' });
     backgroundTargetId = background.targetId;
     const focusWindows = [];
-    const initialFocusWindow = await runFocusCycle(
+    await dispatchUserGesture(cdp, page.sessionId);
+    if (coverLeadWindow) {
+      focusWindows.push(await runFocusCycle(
+        cdp,
+        page,
+        backgroundTargetId,
+        focusPauseMs,
+        resumeSettleMs));
+    }
+
+    await waitForMusicIntro(cdp, page.sessionId, waitMs);
+    await delay(options.beforeBlurMs === undefined ? 1_000 : options.beforeBlurMs);
+    const calmIntroFocusWindow = await runFocusCycle(
       cdp,
       page,
       backgroundTargetId,
       focusPauseMs,
       resumeSettleMs);
-    focusWindows.push(initialFocusWindow);
-    focusLostAt = initialFocusWindow.lostAt;
-    focusRestoredAt = initialFocusWindow.restoredAt;
+    focusWindows.push(calmIntroFocusWindow);
+    focusLostAt = calmIntroFocusWindow.lostAt;
+    focusRestoredAt = calmIntroFocusWindow.restoredAt;
 
-    await waitForMusicLoopCount(cdp, page.sessionId, enterSession ? 2 : 1, postResumeMs);
+    if (enterSession && coverCombatIntro) {
+      await waitForMusicLoopCount(cdp, page.sessionId, 1, postResumeMs);
+      await waitForPostLoopIntro(cdp, page.sessionId, postResumeMs);
+      focusWindows.push(await runFocusCycle(
+        cdp,
+        page,
+        backgroundTargetId,
+        focusPauseMs,
+        resumeSettleMs));
+      await waitForMusicLoopCount(cdp, page.sessionId, 2, postResumeMs);
+    } else {
+      await waitForMusicLoopCount(cdp, page.sessionId, enterSession ? 2 : 1, postResumeMs);
+    }
 
     for (let cycle = 0; cycle < focusCycles; cycle++) {
       focusWindows.push(await runFocusCycle(
@@ -1063,6 +1137,14 @@ function parseArguments(argumentsList) {
       options.enterSession = true;
       continue;
     }
+    if (argument === '--cover-lead-window') {
+      options.coverLeadWindow = true;
+      continue;
+    }
+    if (argument === '--cover-combat-intro') {
+      options.coverCombatIntro = true;
+      continue;
+    }
 
     const valueArguments = new Map([
       ['--build', 'buildDirectory'],
@@ -1109,6 +1191,8 @@ function printHelp() {
     '--focus-cycles <count>   Additional focus cycles after the first loop',
     '--session-load-ms <ms>   Delay used when entering SampleScene',
     '--enter-session          Enter SampleScene before granting audio permission',
+    '--cover-lead-window      Focus loss immediately after the audio gesture',
+    '--cover-combat-intro     Focus loss during combat intro (requires --enter-session)',
     '--output <file>          Write JSON trace result to a file',
   ].join('\n'));
 }

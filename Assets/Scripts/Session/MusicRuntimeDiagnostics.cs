@@ -12,10 +12,12 @@ namespace RobotArena.Session
             int activeGroupIndex,
             int fadingGroupIndex,
             int fadingGroupMask,
+            int fadingSemanticModeMask,
             int audibleSourceCount,
             int activeSequenceAudibleSourceCount,
             bool intentionalCrossfade,
-            bool isAudioPaused)
+            bool isAudioPaused,
+            PauseSource activePauseSources)
         {
             OwnerCount = ownerCount;
             SemanticMode = semanticMode;
@@ -24,10 +26,12 @@ namespace RobotArena.Session
             ActiveGroupIndex = activeGroupIndex;
             FadingGroupIndex = fadingGroupIndex;
             FadingGroupMask = fadingGroupMask;
+            FadingSemanticModeMask = fadingSemanticModeMask;
             AudibleSourceCount = audibleSourceCount;
             ActiveSequenceAudibleSourceCount = activeSequenceAudibleSourceCount;
             IntentionalCrossfade = intentionalCrossfade;
             IsAudioPaused = isAudioPaused;
+            ActivePauseSources = activePauseSources;
         }
 
         public int OwnerCount { get; }
@@ -37,10 +41,12 @@ namespace RobotArena.Session
         public int ActiveGroupIndex { get; }
         public int FadingGroupIndex { get; }
         public int FadingGroupMask { get; }
+        public int FadingSemanticModeMask { get; }
         public int AudibleSourceCount { get; }
         public int ActiveSequenceAudibleSourceCount { get; }
         public bool IntentionalCrossfade { get; }
         public bool IsAudioPaused { get; }
+        public PauseSource ActivePauseSources { get; }
 
         public bool Equals(MusicRuntimeDiagnostics other)
         {
@@ -51,10 +57,12 @@ namespace RobotArena.Session
                    ActiveGroupIndex == other.ActiveGroupIndex &&
                    FadingGroupIndex == other.FadingGroupIndex &&
                    FadingGroupMask == other.FadingGroupMask &&
+                   FadingSemanticModeMask == other.FadingSemanticModeMask &&
                    AudibleSourceCount == other.AudibleSourceCount &&
                    ActiveSequenceAudibleSourceCount == other.ActiveSequenceAudibleSourceCount &&
                    IntentionalCrossfade == other.IntentionalCrossfade &&
-                   IsAudioPaused == other.IsAudioPaused;
+                   IsAudioPaused == other.IsAudioPaused &&
+                   ActivePauseSources == other.ActivePauseSources;
         }
 
         public override bool Equals(object obj)
@@ -73,17 +81,19 @@ namespace RobotArena.Session
                 hash = (hash * 397) ^ ActiveGroupIndex;
                 hash = (hash * 397) ^ FadingGroupIndex;
                 hash = (hash * 397) ^ FadingGroupMask;
+                hash = (hash * 397) ^ FadingSemanticModeMask;
                 hash = (hash * 397) ^ AudibleSourceCount;
                 hash = (hash * 397) ^ ActiveSequenceAudibleSourceCount;
                 hash = (hash * 397) ^ (IntentionalCrossfade ? 1 : 0);
-                return (hash * 397) ^ (IsAudioPaused ? 1 : 0);
+                hash = (hash * 397) ^ (IsAudioPaused ? 1 : 0);
+                return (hash * 397) ^ (int)ActivePauseSources;
             }
         }
 
         public override string ToString()
         {
             return string.Format(
-                "ownerCount={0}; mode={1}; cue={2}; phase={3}; activeGroup={4}; fadingGroup={5}; fadingGroupMask={6}; audibleSources={7}; activeSequenceAudibleSources={8}; intentionalCrossfade={9}; audioPaused={10}",
+                "ownerCount={0}; mode={1}; cue={2}; phase={3}; activeGroup={4}; fadingGroup={5}; fadingGroupMask={6}; fadingSemanticModeMask={7}; audibleSources={8}; activeSequenceAudibleSources={9}; intentionalCrossfade={10}; audioPaused={11}; activePauseSources={12}",
                 OwnerCount,
                 SemanticMode,
                 ActiveCue,
@@ -91,10 +101,12 @@ namespace RobotArena.Session
                 ActiveGroupIndex,
                 FadingGroupIndex,
                 FadingGroupMask,
+                FadingSemanticModeMask,
                 AudibleSourceCount,
                 ActiveSequenceAudibleSourceCount,
                 IntentionalCrossfade,
-                IsAudioPaused);
+                IsAudioPaused,
+                ActivePauseSources);
         }
     }
 }

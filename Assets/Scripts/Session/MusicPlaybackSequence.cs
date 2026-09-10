@@ -34,14 +34,22 @@ namespace RobotArena.Session
                 : MusicPlaybackPhase.WaitingForIntro;
         }
 
-        public bool MarkIntroStarted()
+        public bool MarkIntroStarted(float actualPositionSeconds = 0f)
         {
             if (Phase != MusicPlaybackPhase.WaitingForIntro)
             {
                 return false;
             }
 
+            if (float.IsNaN(actualPositionSeconds) ||
+                float.IsInfinity(actualPositionSeconds) ||
+                actualPositionSeconds < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(actualPositionSeconds));
+            }
+
             Phase = MusicPlaybackPhase.Intro;
+            IntroRemainingSeconds = Math.Max(0f, IntroRemainingSeconds - actualPositionSeconds);
             return true;
         }
 

@@ -52,6 +52,19 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
+        public void Intro_start_anchors_remaining_time_to_observed_source_position()
+        {
+            var sequence = new MusicPlaybackSequence();
+
+            sequence.QueueIntro(10f);
+
+            Assert.That(sequence.MarkIntroStarted(2.5f), Is.True);
+            Assert.That(sequence.IntroRemainingSeconds, Is.EqualTo(7.5f).Within(0.001f));
+            Assert.That(sequence.Advance(7.5f, isPaused: false, actualIntroComplete: false), Is.False);
+            Assert.That(sequence.Phase, Is.EqualTo(MusicPlaybackPhase.Intro));
+        }
+
+        [Test]
         public void Queuing_a_zero_length_intro_enters_the_loop_immediately()
         {
             var sequence = new MusicPlaybackSequence();
