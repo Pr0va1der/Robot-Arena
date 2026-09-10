@@ -160,10 +160,13 @@ namespace RobotArena.WebGL.Editor.Tests
                 "<script src=\"/sdk.js\"></script>\n"
                 + "<script src=\"/sdk.js\"></script>\n"
                 + "YaGames.init(); YaGames.init();\n"
+                + "game_api_pause game_api_pause game_api_resume game_api_resume\n"
                 + "RobotArenaPlatformProbe\n");
 
             Assert.That(errors, Has.Some.Contains("exactly one /sdk.js loader"));
             Assert.That(errors, Has.Some.Contains("exactly one YaGames.init()"));
+            Assert.That(errors, Has.Some.Contains("exactly one lifecycle marker: game_api_pause"));
+            Assert.That(errors, Has.Some.Contains("exactly one lifecycle marker: game_api_resume"));
             Assert.That(errors, Has.Some.Contains("legacy custom bridge"));
             Assert.That(errors, Has.Some.Contains("game_api_pause"));
             Assert.That(errors, Has.Some.Contains("RequestingEnvironmentData"));

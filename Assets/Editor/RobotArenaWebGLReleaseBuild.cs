@@ -102,6 +102,15 @@ namespace RobotArena.WebGL.Editor
                     System.IO.Compression.CompressionLevel.Optimal,
                     includeBaseDirectory: false);
 
+                PluginYG2ArtifactValidation archiveValidation =
+                    ValidatePluginYG2ReleaseArchive(archivePath);
+                if (!archiveValidation.IsValid)
+                {
+                    throw new BuildFailedException(
+                        "PluginYG2 upload archive is invalid: "
+                        + string.Join(" | ", archiveValidation.Errors));
+                }
+
                 WebGLPackageBudgetResult packageResult = WebGLPackageBudget.Measure(
                     archivePath,
                     WebGLPackageBudget.DefaultLimitBytes);
@@ -271,9 +280,20 @@ namespace RobotArena.WebGL.Editor
 
             foreach (string marker in manifest.requiredArtifactMarkers ?? new string[0])
             {
-                if (string.IsNullOrEmpty(marker) || !source.Contains(marker))
+                if (string.IsNullOrEmpty(marker))
                 {
-                    errors.Add("PluginYG2 artifact is missing required marker: " + marker);
+                    continue;
+                }
+
+                int occurrences = CountOccurrences(source, marker);
+                bool lifecycleMarker = marker == "game_api_pause" || marker == "game_api_resume";
+                if ((lifecycleMarker && occurrences != 1) ||
+                    (!lifecycleMarker && occurrences == 0))
+                {
+                    errors.Add(
+                        lifecycleMarker
+                            ? "PluginYG2 artifact must contain exactly one lifecycle marker: " + marker
+                            : "PluginYG2 artifact is missing required marker: " + marker);
                 }
             }
 
@@ -365,6 +385,44 @@ namespace RobotArena.WebGL.Editor
             manifestErrors.AddRange(
                 GetPluginYG2ArtifactErrors(File.ReadAllText(indexPath)));
             return new PluginYG2ArtifactValidation(manifest, manifestErrors);
+        }
+
+        private static PluginYG2ArtifactValidation ValidatePluginYG2ReleaseArchive(
+            string archivePath)
+        {
+            var errors = new List<string>();
+            PluginYG2IntegrationManifest manifest = LoadPluginYG2Manifest(errors);
+            if (!File.Exists(archivePath))
+            {
+                errors.Add("PluginYG2 upload archive is missing.");
+                return new PluginYG2ArtifactValidation(manifest, errors);
+            }
+
+            using (ZipArchive archive = ZipFile.OpenRead(archivePath))
+            {
+                ZipArchiveEntry indexEntry = null;
+                foreach (ZipArchiveEntry entry in archive.Entries)
+                {
+                    if (entry.FullName == "index.html")
+                    {
+                        indexEntry = entry;
+                        break;
+                    }
+                }
+
+                if (indexEntry == null)
+                {
+                    errors.Add("PluginYG2 upload archive is missing root index.html.");
+                    return new PluginYG2ArtifactValidation(manifest, errors);
+                }
+
+                using (StreamReader reader = new StreamReader(indexEntry.Open()))
+                {
+                    errors.AddRange(GetPluginYG2ArtifactErrors(reader.ReadToEnd()));
+                }
+            }
+
+            return new PluginYG2ArtifactValidation(manifest, errors);
         }
 
         private static PluginYG2IntegrationManifest LoadPluginYG2Manifest(
