@@ -3,6 +3,7 @@ using System.Collections;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.TestTools;
 
 namespace RobotArena.Session.Tests
@@ -10,15 +11,127 @@ namespace RobotArena.Session.Tests
     public sealed class GameMusicRuntimeTests
     {
         private Component createdRuntime;
+        private GameObject createdPauseMenuObject;
 
         [UnityTearDown]
         public IEnumerator DestroyCreatedRuntime()
         {
+            if (createdPauseMenuObject != null)
+            {
+                UnityEngine.Object.Destroy(createdPauseMenuObject);
+                createdPauseMenuObject = null;
+            }
+
             if (createdRuntime != null)
             {
                 UnityEngine.Object.Destroy(createdRuntime.gameObject);
                 createdRuntime = null;
                 yield return null;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Runtime_diagnostics_keep_active_intro_paused_during_composed_audio_pause()
+        {
+            Type runtimeType = Type.GetType("GameMusicRuntime, Assembly-CSharp", true);
+            Component existing = (Component)UnityEngine.Object.FindObjectOfType(runtimeType);
+            Component owner = (Component)runtimeType
+                .GetMethod("GetOrCreate", BindingFlags.Public | BindingFlags.Static)
+                .Invoke(null, null);
+            if (existing == null)
+            {
+                createdRuntime = owner;
+            }
+
+            GameObject pauseObject = new GameObject("MusicRuntimePauseIntegrationCanvas");
+            createdPauseMenuObject = pauseObject;
+            Canvas canvas = pauseObject.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            pauseObject.AddComponent<CanvasScaler>();
+            pauseObject.AddComponent<GraphicRaycaster>();
+            Type pauseMenuType = Type.GetType("PauseMenu, Assembly-CSharp", true);
+            Component pauseMenu = pauseObject.AddComponent(pauseMenuType);
+            Type desktopUiType = Type.GetType("DesktopArenaUi, Assembly-CSharp", true);
+            Behaviour desktopUi = (Behaviour)pauseObject.GetComponent(desktopUiType);
+            if (desktopUi != null)
+            {
+                desktopUi.enabled = false;
+            }
+
+            yield return null;
+
+            FieldInfo focusLostField = runtimeType.GetField(
+                "applicationFocusLost",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo applicationPausedField = runtimeType.GetField(
+                "applicationPaused",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            focusLostField.SetValue(owner, false);
+            applicationPausedField.SetValue(owner, false);
+
+            AudioClip testIntro = AudioClip.Create("MusicRuntimeTestIntro", 480, 1, 48000, false);
+            AudioClip testLoop = AudioClip.Create("MusicRuntimeTestLoop", 480, 1, 48000, false);
+            MethodInfo startMode = runtimeType.GetMethod(
+                "StartMode",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            MethodInfo requestCue = runtimeType.GetMethod(
+                "OnCueRequested",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo activeCueField = runtimeType.GetField(
+                "activeCue",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            try
+            {
+                startMode.Invoke(owner, new object[] { testIntro, testLoop });
+                yield return null;
+
+                PropertyInfo diagnosticsProperty = runtimeType.GetProperty(
+                    "Diagnostics",
+                    BindingFlags.Public | BindingFlags.Instance);
+                MusicRuntimeDiagnostics diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.PlaybackPhase, Is.EqualTo(MusicPlaybackPhase.Intro));
+
+                pauseMenuType.GetMethod("SetTutorialMode").Invoke(pauseMenu, new object[] { false });
+                MethodInfo setPauseSource = pauseMenuType.GetMethod("SetPauseSource");
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Focus, true });
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Advertisement, true });
+                yield return null;
+
+                diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.IsAudioPaused, Is.True);
+                Assert.That(diagnostics.PlaybackPhase, Is.EqualTo(MusicPlaybackPhase.Intro));
+                Assert.That(diagnostics.AudibleSourceCount, Is.Zero);
+                Assert.That(diagnostics.ActiveSequenceAudibleSourceCount, Is.Zero);
+
+                yield return new WaitForSecondsRealtime(0.25f);
+                diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.PlaybackPhase, Is.EqualTo(MusicPlaybackPhase.Intro));
+
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Focus, false });
+                yield return null;
+                diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.IsAudioPaused, Is.True);
+
+                setPauseSource.Invoke(pauseMenu, new object[] { PauseSource.Advertisement, false });
+                yield return null;
+                focusLostField.SetValue(owner, false);
+                applicationPausedField.SetValue(owner, false);
+
+                diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+                Assert.That(diagnostics.IsAudioPaused, Is.False);
+                PropertyInfo requiresPointerLockClick = pauseMenuType.GetProperty("RequiresPointerLockClick");
+                Assert.That((bool)requiresPointerLockClick.GetValue(pauseMenu), Is.True);
+
+                requestCue.Invoke(owner, new object[] { MusicCue.Silent });
+                yield return new WaitForSecondsRealtime(0.6f);
+            }
+            finally
+            {
+                requestCue.Invoke(owner, new object[] { MusicCue.Silent });
+                activeCueField.SetValue(owner, MusicCue.None);
+                UnityEngine.Object.Destroy(testIntro);
+                UnityEngine.Object.Destroy(testLoop);
             }
         }
 
@@ -44,6 +157,36 @@ namespace RobotArena.Session.Tests
         }
 
         [UnityTest]
+        public IEnumerator Runtime_diagnostics_report_one_owner_and_silent_playback_before_permission()
+        {
+            Type runtimeType = Type.GetType("GameMusicRuntime, Assembly-CSharp", true);
+            Component existing = (Component)UnityEngine.Object.FindObjectOfType(runtimeType);
+            Component owner = (Component)runtimeType
+                .GetMethod("GetOrCreate", BindingFlags.Public | BindingFlags.Static)
+                .Invoke(null, null);
+            if (existing == null)
+            {
+                createdRuntime = owner;
+            }
+
+            yield return null;
+
+            PropertyInfo diagnosticsProperty = runtimeType.GetProperty(
+                "Diagnostics",
+                BindingFlags.Public | BindingFlags.Instance);
+            MusicRuntimeDiagnostics diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+
+            Assert.That(diagnostics.OwnerCount, Is.EqualTo(1));
+            Assert.That(diagnostics.SemanticMode, Is.EqualTo(MusicMode.Silent));
+            Assert.That(diagnostics.ActiveCue, Is.EqualTo(MusicCue.None));
+            Assert.That(diagnostics.PlaybackPhase, Is.EqualTo(MusicPlaybackPhase.Silent));
+            Assert.That(diagnostics.ActiveGroupIndex, Is.EqualTo(-1));
+            Assert.That(diagnostics.FadingGroupIndex, Is.EqualTo(-1));
+            Assert.That(diagnostics.FadingGroupMask, Is.Zero);
+            Assert.That(diagnostics.AudibleSourceCount, Is.Zero);
+        }
+
+        [UnityTest]
         public IEnumerator Scene_duplicate_is_destroyed_before_it_can_become_an_owner()
         {
             Type runtimeType = Type.GetType("GameMusicRuntime, Assembly-CSharp", true);
@@ -62,6 +205,12 @@ namespace RobotArena.Session.Tests
 
             Assert.That(UnityEngine.Object.FindObjectsOfType(runtimeType).Length, Is.EqualTo(1));
             Assert.That(UnityEngine.Object.FindObjectOfType(runtimeType), Is.SameAs(owner));
+
+            PropertyInfo diagnosticsProperty = runtimeType.GetProperty(
+                "Diagnostics",
+                BindingFlags.Public | BindingFlags.Instance);
+            MusicRuntimeDiagnostics diagnostics = (MusicRuntimeDiagnostics)diagnosticsProperty.GetValue(owner);
+            Assert.That(diagnostics.OwnerCount, Is.EqualTo(1));
         }
     }
 }

@@ -18,3 +18,13 @@ The gate measures the sum of uncompressed ZIP entries and fails above the
 `index.html` and all other files under `Build/`. The generated report records the
 package size, per-file sizes, texture profile, stripping profile, and any gate
 errors.
+
+## Music lifecycle smoke
+
+After creating a fresh release package, run the browser lifecycle check from the repository root:
+
+```text
+node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --output Build/WebGL/RobotArenaMusicLifecycleSmoke.json
+```
+
+The check requires Node 22 or newer and Microsoft Edge. It serves the Brotli package over a local HTTP server, enables audio with a real pointer gesture, switches to a background tab during the first calm intro, restores the game focus, and instruments WebAudio buffer starts and stops. It fails on same-sequence audible overlap, more than one authoritative zero-offset loop for a semantic sequence, a loop start during focus loss, or a loop start before the resumed intro has finished. WebGL backend restarts with a positive resume offset are retained as evidence and are not counted as duplicate sequence starts. With `--enter-session`, distinct WebAudio buffer identities also verify that the initial calm cue reaches its loop before the combat cue begins. The JSON output retains the machine-readable trace for release evidence.
