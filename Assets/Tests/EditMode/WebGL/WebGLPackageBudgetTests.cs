@@ -112,6 +112,63 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(result.format, Is.EqualTo(TextureImporterFormat.DXT5Crunched));
         }
 
+        [Test]
+        public void PluginYG2_release_configuration_accepts_the_pinned_official_path()
+        {
+            var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
+                "UNITY_POST_PROCESSING_STACK_V2;YandexGamesPlatform_yg;ROBOTARENA_PLUGINYG2;PLUGIN_YG_2;EnvirData_yg",
+                "v2.0092",
+                "<script src=\"/sdk.js\"></script>\n<script>YaGames.init()</script>");
+
+            Assert.That(errors, Is.Empty);
+        }
+
+        [Test]
+        public void PluginYG2_release_configuration_rejects_a_partial_or_custom_sdk_path()
+        {
+            var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
+                "ROBOTARENA_PLUGINYG2;PLUGIN_YG_2",
+                "v2.0091",
+                "<script src=\"/custom-sdk.js\"></script>");
+
+            Assert.That(errors, Has.Some.Contains("YandexGamesPlatform_yg"));
+            Assert.That(errors, Has.Some.Contains("EnvirData_yg"));
+            Assert.That(errors, Has.Some.Contains("v2.0092"));
+            Assert.That(errors, Has.Some.Contains("exactly one /sdk.js loader"));
+            Assert.That(errors, Has.Some.Contains("exactly one YaGames.init()"));
+        }
+
+        [Test]
+        public void PluginYG2_post_processed_artifact_accepts_the_official_runtime_markers()
+        {
+            var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
+                "<script src=\"/sdk.js\"></script>\n"
+                + "const sdk = await YaGames.init();\n"
+                + "ysdk.on('game_api_pause', PauseCallback);\n"
+                + "ysdk.on('game_api_resume', ResumeCallback);\n"
+                + "await RequestingEnvironmentData();\n"
+                + "YG2Instance('SetEnvirData', environmentData);\n"
+                + "[PluginYG2 v2.0092] [Platform: YandexGames]");
+
+            Assert.That(errors, Is.Empty);
+        }
+
+        [Test]
+        public void PluginYG2_post_processed_artifact_rejects_legacy_or_duplicate_runtime_paths()
+        {
+            var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
+                "<script src=\"/sdk.js\"></script>\n"
+                + "<script src=\"/sdk.js\"></script>\n"
+                + "YaGames.init(); YaGames.init();\n"
+                + "RobotArenaPlatformProbe\n");
+
+            Assert.That(errors, Has.Some.Contains("exactly one /sdk.js loader"));
+            Assert.That(errors, Has.Some.Contains("exactly one YaGames.init()"));
+            Assert.That(errors, Has.Some.Contains("legacy custom bridge"));
+            Assert.That(errors, Has.Some.Contains("game_api_pause"));
+            Assert.That(errors, Has.Some.Contains("RequestingEnvironmentData"));
+        }
+
         private void CreateArchive(params (string Name, int Size)[] entries)
         {
             using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))

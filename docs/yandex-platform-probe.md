@@ -19,7 +19,12 @@ The project uses PluginYG2 behind the project-owned `Platform Services Adapter`.
 - `ROBOTARENA_PLUGINYG2` selects `RobotArenaPluginYG2Backend`.
 - Without that symbol, the migration-only `RobotArenaPlatformProbeBackend` wraps the legacy probe.
 
-The adapter exposes SDK status, environment, language, capabilities, Game Ready, and platform pause events. The title menu marks the interactive boundary once; the adapter then sends Game Ready once the backend reports an initialized SDK. Missing SDK data remains a usable guest mode.
+The adapter exposes SDK status, environment, language, capabilities, Game Ready
+state, and platform pause events. Game Ready state distinguishes a request from a
+confirmed call; the PluginYG2 backend never reports confirmation merely because it
+dispatched the official API call. The title menu marks the interactive boundary
+once; the adapter then sends Game Ready once the backend reports an initialized
+SDK. Missing or timed-out SDK data remains a usable guest mode.
 
 PluginYG2 is the only SDK initializer after cutover. `RobotArenaPluginYG2Template` contains one `/sdk.js` loader and one `YaGames.init()` call, while PluginYG2 receives its initialization data through its normal template insertion points.
 
@@ -32,10 +37,29 @@ Use **Robot Arena → Build WebGL release package**. The command selects `PROJEC
 The local lifecycle check is:
 
 ```text
-node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --platform-pause-cycles 2 --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
+node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
 ```
 
-The current licensed Unity release candidate passed the package gate: 20,965,688 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke passed two PluginYG2 pause/resume cycles and three focus cycles with `consoleErrors: []`, `browserResourceErrors: []`, no same-sequence audible overlap, no loop starts during platform pause, and no resumed intro starts. The local smoke server supplies an explicit guest-only `/sdk.js` stub and a `204` favicon response; the hosted Yandex draft still uses the real SDK endpoint.
+The current licensed Unity release candidate passed the package gate: 20,965,688 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke verifies Unity loading plus the focus/music lifecycle. Its `/sdk.js` response is an inert placeholder with no `YaGames` implementation, so local results are not evidence of SDK initialization or Yandex lifecycle delivery. Direct callback testing is available only as the explicitly synthetic `--synthetic-platform-pause-cycles` diagnostic.
+
+The release command validates the official integration before building from
+`Tools/RobotArenaPluginYG2Integration.json`: PluginYG2 must match the pinned
+version and provenance hash, the PluginYG2/Yandex/EnvirData WebGL defines must be
+enabled, and the production template must contain one `/sdk.js` loader and one
+`YaGames.init()` call. It validates the post-processed artifact as well, including
+the official lifecycle and EnvirData insertion markers. The release report records
+those integration coordinates and the artifact validation result.
+
+In the Yandex draft, successful real-SDK integration is identified by the
+structured runtime messages `[RobotArena.Platform] PluginYG2 SDK ready`,
+`PluginYG2 Game Ready requested`, and `PluginYG2 platform pause=True/False`,
+together with the official SDK's own Game Ready outcome. The request message is
+not itself a confirmation. The browser template also emits a capability report by
+checking entry-point presence only; it does not call Player, leaderboard, or
+advertising APIs in this migration.
+These messages originate after data and events pass through the official `YG2`
+APIs into `RobotArenaPluginYG2Backend`; they must be captured together with the
+successful Yandex `/sdk.js` network request.
 
 The remaining production gate is the Yandex Games draft smoke in issue #38. It must confirm SDK/environment delivery, guest behavior, title-menu readiness, pause/resume, and the same music invariants in the hosted draft. The migration parent issue remains open until that human-controlled check is recorded.
 

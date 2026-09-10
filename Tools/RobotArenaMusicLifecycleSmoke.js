@@ -21,7 +21,7 @@ const DEFAULT_POST_RESUME_MS = 20_000;
 // still useful for the smoke test, while weapon and UI effects are much shorter.
 const DEFAULT_MINIMUM_MUSIC_BUFFER_SECONDS = 5;
 const CONTEXT_TIME_TOLERANCE_SECONDS = 0.05;
-const LOCAL_GUEST_SDK_STUB = 'window.YaGames = window.YaGames || {};\n';
+const LOCAL_SDK_PLACEHOLDER = '// Local music smoke only; the real SDK is loaded by Yandex Games.\n';
 
 function isFiniteNumber(value) {
   return value !== null && value !== undefined && Number.isFinite(Number(value));
@@ -531,7 +531,7 @@ function createStaticServer(buildDirectory) {
       }
 
       if (requestedPath === 'sdk.js' && !fs.existsSync(filePath)) {
-        const body = Buffer.from(LOCAL_GUEST_SDK_STUB, 'utf8');
+        const body = Buffer.from(LOCAL_SDK_PLACEHOLDER, 'utf8');
         response.writeHead(200, {
           'Cache-Control': 'no-store',
           'Content-Length': body.length,
@@ -900,6 +900,22 @@ async function readTrace(cdp, sessionId) {
   return JSON.parse(serialized);
 }
 
+async function readPluginYG2InitState(cdp, sessionId) {
+  const serialized = await evaluate(
+    cdp,
+    sessionId,
+    'JSON.stringify(window.__robotArenaPluginYG2 || null)');
+  return serialized === 'null' ? null : JSON.parse(serialized);
+}
+
+function assertLocalPluginYG2Fallback(state) {
+  if (!state || !['local', 'failed', 'timeout'].includes(state.initState)) {
+    throw new Error(
+      'local smoke did not reach an explicit non-SDK PluginYG2 state: ' +
+      JSON.stringify(state));
+  }
+}
+
 async function summarizeMusicTrace(cdp, sessionId) {
   try {
     const trace = await readTrace(cdp, sessionId);
@@ -1053,11 +1069,13 @@ async function runFocusCycle(
   return { lostAt, restoredAt };
 }
 
-async function runPlatformPauseCycle(
+async function runSyntheticPlatformPauseCycle(
   cdp,
   page,
   pauseDurationMs,
   resumeSettleMs) {
+  // This intentionally bypasses ysdk.on(...). It covers only the generated
+  // PluginYG2 template callback-to-Unity path and is never hosted SDK evidence.
   const pausedAt = Date.now();
   const pauseDispatched = await evaluate(cdp, page.sessionId, `(() => {
     if (typeof PauseCallback !== 'function' || typeof YG2Instance !== 'function') {
@@ -1068,7 +1086,7 @@ async function runPlatformPauseCycle(
     return true;
   })()`);
   if (!pauseDispatched) {
-    throw new Error('PluginYG2 template pause callback is unavailable');
+    throw new Error('PluginYG2 template pause callback is unavailable for synthetic testing');
   }
 
   const pauseDiagnosticObserved = await waitFor(
@@ -1087,7 +1105,7 @@ async function runPlatformPauseCycle(
     return true;
   })()`);
   if (!resumeDispatched) {
-    throw new Error('PluginYG2 template resume callback is unavailable');
+    throw new Error('PluginYG2 template resume callback is unavailable for synthetic testing');
   }
 
   const resumeDiagnosticObserved = await waitFor(
@@ -1155,11 +1173,11 @@ async function runMusicLifecycleSmoke(options = {}) {
     : options.postResumeMs;
   const focusCycles = options.focusCycles === undefined ? 2 : options.focusCycles;
   const enterSession = options.enterSession === true;
-  const platformPauseCycles = options.platformPauseCycles === undefined
-    ? (enterSession ? 2 : 0)
-    : options.platformPauseCycles;
-  if (platformPauseCycles > 0 && !enterSession) {
-    throw new Error('--platform-pause-cycles requires --enter-session');
+  const syntheticPlatformPauseCycles = options.syntheticPlatformPauseCycles === undefined
+    ? 0
+    : options.syntheticPlatformPauseCycles;
+  if (syntheticPlatformPauseCycles > 0 && !enterSession) {
+    throw new Error('--synthetic-platform-pause-cycles requires --enter-session');
   }
   const coverLeadWindow = options.coverLeadWindow === true;
   const coverCombatIntro = options.coverCombatIntro === true;
@@ -1219,6 +1237,9 @@ async function runMusicLifecycleSmoke(options = {}) {
         `browser resources=[${resourceErrors}]`);
     }
 
+    const pluginYG2Init = await readPluginYG2InitState(cdp, page.sessionId);
+    assertLocalPluginYG2Fallback(pluginYG2Init);
+
     if (enterSession) {
       await delay(sessionLoadMs);
       await evaluate(cdp, page.sessionId, `(() => {
@@ -1272,8 +1293,8 @@ async function runMusicLifecycleSmoke(options = {}) {
     }
 
     const platformPauseWindows = [];
-    for (let cycle = 0; cycle < platformPauseCycles; cycle++) {
-      platformPauseWindows.push(await runPlatformPauseCycle(
+    for (let cycle = 0; cycle < syntheticPlatformPauseCycles; cycle++) {
+      platformPauseWindows.push(await runSyntheticPlatformPauseCycle(
         cdp,
         page,
         focusPauseMs,
@@ -1317,6 +1338,10 @@ async function runMusicLifecycleSmoke(options = {}) {
       focusRestoredAt,
       focusWindows,
       platformPauseWindows,
+      platformPauseEvidence: syntheticPlatformPauseCycles > 0
+        ? 'synthetic-template-callback'
+        : 'none',
+      pluginYG2Init,
       enterSession,
       consoleErrors,
       browserResourceErrors,
@@ -1376,7 +1401,7 @@ function parseArguments(argumentsList) {
       ['--resume-settle-ms', 'resumeSettleMs'],
       ['--post-resume-ms', 'postResumeMs'],
       ['--focus-cycles', 'focusCycles'],
-      ['--platform-pause-cycles', 'platformPauseCycles'],
+      ['--synthetic-platform-pause-cycles', 'syntheticPlatformPauseCycles'],
       ['--session-load-ms', 'sessionLoadMs'],
       ['--output', 'outputPath'],
     ]);
@@ -1393,7 +1418,7 @@ function parseArguments(argumentsList) {
     options[optionName] = optionName.endsWith('Ms') ||
         optionName === 'waitMs' ||
         optionName === 'focusCycles' ||
-        optionName === 'platformPauseCycles'
+        optionName === 'syntheticPlatformPauseCycles'
       ? Number(value)
       : value;
   }
@@ -1413,7 +1438,7 @@ function printHelp() {
     '--resume-settle-ms <ms> Delay after focus restoration before next cycle',
     '--post-resume-ms <ms>    Time to observe after focus restoration',
     '--focus-cycles <count>   Additional focus cycles after the first loop',
-    '--platform-pause-cycles <count>  PluginYG2 pause/resume cycles (requires --enter-session)',
+    '--synthetic-platform-pause-cycles <count>  Direct callback cycles; local harness only, not Yandex SDK evidence',
     '--session-load-ms <ms>   Delay used when entering SampleScene',
     '--enter-session          Enter SampleScene before granting audio permission',
     '--cover-lead-window      Focus loss immediately after the audio gesture',
@@ -1449,5 +1474,7 @@ module.exports = {
   assertMusicLifecycle,
   assertSemanticModeTransition,
   createStaticServer,
+  assertLocalPluginYG2Fallback,
+  readPluginYG2InitState,
   runMusicLifecycleSmoke,
 };

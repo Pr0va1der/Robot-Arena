@@ -24,6 +24,10 @@ namespace RobotArena.Platform
             RobotArenaPlatformProbe.MarkInteractiveReady();
         }
 
+        public void Tick(float unscaledTime)
+        {
+        }
+
         public void Dispose()
         {
             probe.ReportChanged -= OnReportChanged;

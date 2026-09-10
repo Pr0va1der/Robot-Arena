@@ -43,6 +43,14 @@ public sealed class RobotArenaPlatformServices : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+        if (backend != null)
+        {
+            backend.Tick(Time.unscaledTime);
+        }
+    }
+
     private void Awake()
     {
         if (instance != null && instance != this)

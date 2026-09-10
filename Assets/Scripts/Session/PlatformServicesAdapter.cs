@@ -11,6 +11,21 @@ namespace RobotArena.Platform
         Failed
     }
 
+    public enum PlatformGameReadyStatus
+    {
+        NotRequested,
+        Requested,
+        Confirmed,
+        Failed
+    }
+
+    public enum PlatformCapabilityStatus
+    {
+        Unknown,
+        Available,
+        Unavailable
+    }
+
     public sealed class PlatformServicesSnapshot
     {
         public PlatformServicesSnapshot(
@@ -26,18 +41,49 @@ namespace RobotArena.Platform
             bool supportsFullscreenAds,
             bool gameReady,
             string failureReason)
+            : this(
+                status,
+                sdkDetected,
+                sdkInitialized,
+                environment,
+                language,
+                hasLoadingApi
+                    ? PlatformCapabilityStatus.Available
+                    : PlatformCapabilityStatus.Unavailable,
+                supportsPause,
+                supportsPlayerData,
+                supportsLeaderboard,
+                supportsFullscreenAds,
+                gameReady ? PlatformGameReadyStatus.Confirmed : PlatformGameReadyStatus.NotRequested,
+                failureReason)
+        {
+        }
+
+        public PlatformServicesSnapshot(
+            PlatformServicesStatus status,
+            bool sdkDetected,
+            bool sdkInitialized,
+            string environment,
+            string language,
+            PlatformCapabilityStatus loadingApiStatus,
+            bool supportsPause,
+            bool supportsPlayerData,
+            bool supportsLeaderboard,
+            bool supportsFullscreenAds,
+            PlatformGameReadyStatus gameReadyStatus,
+            string failureReason)
         {
             Status = status;
             SdkDetected = sdkDetected;
             SdkInitialized = sdkInitialized;
             Environment = environment ?? string.Empty;
             Language = language ?? string.Empty;
-            HasLoadingApi = hasLoadingApi;
+            LoadingApiStatus = loadingApiStatus;
             SupportsPause = supportsPause;
             SupportsPlayerData = supportsPlayerData;
             SupportsLeaderboard = supportsLeaderboard;
             SupportsFullscreenAds = supportsFullscreenAds;
-            GameReady = gameReady;
+            GameReadyStatus = gameReadyStatus;
             FailureReason = failureReason ?? string.Empty;
         }
 
@@ -46,15 +92,17 @@ namespace RobotArena.Platform
         public bool SdkInitialized { get; }
         public string Environment { get; }
         public string Language { get; }
-        public bool HasLoadingApi { get; }
+        public PlatformCapabilityStatus LoadingApiStatus { get; }
+        public bool HasLoadingApi => LoadingApiStatus == PlatformCapabilityStatus.Available;
         public bool SupportsPause { get; }
         public bool SupportsPlayerData { get; }
         public bool SupportsLeaderboard { get; }
         public bool SupportsFullscreenAds { get; }
-        public bool GameReady { get; }
+        public PlatformGameReadyStatus GameReadyStatus { get; }
+        public bool GameReady => GameReadyStatus == PlatformGameReadyStatus.Confirmed;
         public string FailureReason { get; }
 
-        public PlatformServicesSnapshot WithGameReady()
+        public PlatformServicesSnapshot WithGameReadyRequested()
         {
             return new PlatformServicesSnapshot(
                 Status,
@@ -62,16 +110,74 @@ namespace RobotArena.Platform
                 SdkInitialized,
                 Environment,
                 Language,
-                HasLoadingApi,
+                LoadingApiStatus,
                 SupportsPause,
                 SupportsPlayerData,
                 SupportsLeaderboard,
                 SupportsFullscreenAds,
-                gameReady: true,
+                PlatformGameReadyStatus.Requested,
                 FailureReason);
         }
 
+        public PlatformServicesSnapshot WithGameReadyConfirmed()
+        {
+            return new PlatformServicesSnapshot(
+                Status,
+                SdkDetected,
+                SdkInitialized,
+                Environment,
+                Language,
+                LoadingApiStatus,
+                SupportsPause,
+                SupportsPlayerData,
+                SupportsLeaderboard,
+                SupportsFullscreenAds,
+                PlatformGameReadyStatus.Confirmed,
+                FailureReason);
+        }
+
+        public PlatformServicesSnapshot WithGameReadyFailed(string reason)
+        {
+            return new PlatformServicesSnapshot(
+                Status,
+                SdkDetected,
+                SdkInitialized,
+                Environment,
+                Language,
+                LoadingApiStatus,
+                SupportsPause,
+                SupportsPlayerData,
+                SupportsLeaderboard,
+                SupportsFullscreenAds,
+                PlatformGameReadyStatus.Failed,
+                reason);
+        }
+
         public PlatformServicesSnapshot WithSdkReady(string environment, string language)
+        {
+            return WithSdkReady(
+                environment,
+                language,
+                PlatformCapabilityStatus.Unknown);
+        }
+
+        public PlatformServicesSnapshot WithSdkReady(
+            string environment,
+            string language,
+            bool hasLoadingApi)
+        {
+            return WithSdkReady(
+                environment,
+                language,
+                hasLoadingApi
+                    ? PlatformCapabilityStatus.Available
+                    : PlatformCapabilityStatus.Unavailable);
+        }
+
+        public PlatformServicesSnapshot WithSdkReady(
+            string environment,
+            string language,
+            PlatformCapabilityStatus loadingApiStatus)
         {
             return new PlatformServicesSnapshot(
                 PlatformServicesStatus.Ready,
@@ -79,12 +185,12 @@ namespace RobotArena.Platform
                 sdkInitialized: true,
                 environment,
                 language,
-                hasLoadingApi: true,
+                loadingApiStatus,
                 supportsPause: true,
                 SupportsPlayerData,
                 SupportsLeaderboard,
                 SupportsFullscreenAds,
-                GameReady,
+                GameReadyStatus,
                 failureReason: string.Empty);
         }
     }
@@ -98,6 +204,8 @@ namespace RobotArena.Platform
         event Action<bool> PlatformPauseChanged;
 
         void MarkGameReady();
+
+        void Tick(float unscaledTime);
 
         void Dispose();
     }
@@ -161,7 +269,7 @@ namespace RobotArena.Platform
                 gameReadyRequested ||
                 snapshot == null ||
                 !snapshot.SdkInitialized ||
-                snapshot.GameReady)
+                snapshot.GameReadyStatus != PlatformGameReadyStatus.NotRequested)
             {
                 return;
             }

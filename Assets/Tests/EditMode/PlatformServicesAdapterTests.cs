@@ -41,6 +41,31 @@ namespace RobotArena.Session.Tests
             adapter.MarkInteractiveReady();
 
             Assert.That(backend.MarkGameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Requested));
+            Assert.That(adapter.Current.GameReady, Is.False);
+            Assert.That(
+                adapter.Current.LoadingApiStatus,
+                Is.EqualTo(PlatformCapabilityStatus.Unknown));
+        }
+
+        [Test]
+        public void Does_not_request_game_ready_after_backend_reports_failure()
+        {
+            var backend = new FakeBackend(
+                PlatformServicesStatus.Ready,
+                sdkInitialized: true,
+                environment: "production",
+                language: "en");
+            var adapter = new PlatformServicesAdapter(backend);
+
+            backend.PublishSnapshot(backend.Snapshot.WithGameReadyFailed("Loading API unavailable."));
+            adapter.MarkInteractiveReady();
+
+            Assert.That(backend.MarkGameReadyCallCount, Is.Zero);
+            Assert.That(adapter.Current.GameReadyStatus, Is.EqualTo(PlatformGameReadyStatus.Failed));
+            Assert.That(adapter.Current.FailureReason, Is.EqualTo("Loading API unavailable."));
         }
 
         [Test]
@@ -150,8 +175,12 @@ namespace RobotArena.Session.Tests
             public void MarkGameReady()
             {
                 MarkGameReadyCallCount++;
-                Snapshot = Snapshot.WithGameReady();
+                Snapshot = Snapshot.WithGameReadyRequested();
                 SnapshotChanged?.Invoke(Snapshot);
+            }
+
+            public void Tick(float unscaledTime)
+            {
             }
 
             public void PublishPause(bool isPaused)

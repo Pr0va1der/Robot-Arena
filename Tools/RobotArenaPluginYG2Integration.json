@@ -1,0 +1,33 @@
+{
+  "plugin": "PluginYG2",
+  "pluginVersion": "v2.0092",
+  "sourceArchiveSha256": "8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3",
+  "versionFile": "Assets/PluginYourGames/Version.txt",
+  "templateFile": "Assets/WebGLTemplates/RobotArenaPluginYG2/index.html",
+  "platform": "YandexGamesPlatform_yg",
+  "modules": [
+    "Core",
+    "YandexGames",
+    "EnvirData"
+  ],
+  "requiredDefines": [
+    "YandexGamesPlatform_yg",
+    "ROBOTARENA_PLUGINYG2",
+    "PLUGIN_YG_2",
+    "EnvirData_yg"
+  ],
+  "sdkLoader": "<script src=\"/sdk.js\"></script>",
+  "sdkInitializer": "YaGames.init()",
+  "requiredArtifactMarkers": [
+    "game_api_pause",
+    "game_api_resume",
+    "RequestingEnvironmentData",
+    "SetEnvirData",
+    "PluginYG2 v2.0092"
+  ],
+  "forbiddenArtifactMarkers": [
+    "RobotArenaPlatformProbe",
+    "__robotArenaPlatformProbe",
+    "RobotArenaPlatformProbe_"
+  ]
+}

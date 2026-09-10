@@ -6,10 +6,15 @@ const test = require('node:test');
 
 const {
   analyzeMusicTrace,
+  assertLocalPluginYG2Fallback,
   assertMusicLifecycle,
   assertSemanticModeTransition,
   createStaticServer,
 } = require('./RobotArenaMusicLifecycleSmoke.js');
+
+const smokeSource = fs.readFileSync(
+  path.join(__dirname, 'RobotArenaMusicLifecycleSmoke.js'),
+  'utf8');
 
 function createTrace(loopContextTime) {
   return [
@@ -302,7 +307,7 @@ test('serves Brotli-compressed Unity assets at their logical URL', async () => {
   }
 });
 
-test('serves an explicit local guest SDK stub for the PluginYG2 template', async () => {
+test('serves a non-SDK placeholder locally without emulating YaGames', async () => {
   const buildDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), 'robot-arena-music-sdk-server-'));
   const staticServer = await createStaticServer(buildDirectory);
@@ -312,7 +317,9 @@ test('serves an explicit local guest SDK stub for the PluginYG2 template', async
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/javascript; charset=utf-8');
-    assert.match(await response.text(), /window\.YaGames/);
+    const sdkPlaceholder = await response.text();
+    assert.match(sdkPlaceholder, /local music smoke/i);
+    assert.doesNotMatch(sdkPlaceholder, /YaGames|\.init\s*\(/);
 
     const faviconResponse = await fetch(
       `http://127.0.0.1:${staticServer.port}/favicon.ico`);
@@ -321,6 +328,20 @@ test('serves an explicit local guest SDK stub for the PluginYG2 template', async
     await new Promise(resolve => staticServer.server.close(resolve));
     fs.rmSync(buildDirectory, { recursive: true, force: true });
   }
+});
+
+test('marks direct PluginYG2 callback evidence as synthetic', () => {
+  assert.match(smokeSource, /platformPauseEvidence:[\s\S]*synthetic-template-callback/);
+  assert.match(smokeSource, /bypasses ysdk\.on/);
+});
+
+test('requires local smoke to report an explicit non-SDK PluginYG2 state', () => {
+  assert.doesNotThrow(() => assertLocalPluginYG2Fallback({ initState: 'local' }));
+  assert.doesNotThrow(() => assertLocalPluginYG2Fallback({ initState: 'failed' }));
+  assert.doesNotThrow(() => assertLocalPluginYG2Fallback({ initState: 'timeout' }));
+  assert.throws(
+    () => assertLocalPluginYG2Fallback({ initState: 'ready' }),
+    /explicit non-SDK PluginYG2 state/);
 });
 
 test('rejects a music loop that starts during a PluginYG2 platform pause', () => {

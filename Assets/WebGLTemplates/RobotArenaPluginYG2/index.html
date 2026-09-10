@@ -126,6 +126,21 @@
         let syncInit = false;
         let isVisibility = true;
         let isPausedGame = false;
+        let unityStartRequested = false;
+        const PLUGIN_YG2_INIT_TIMEOUT_MS = 8000;
+        window.__robotArenaPluginYG2 = {
+            initState: 'waiting',
+            initStartedAt: null,
+            initFinishedAt: null,
+            timeoutMs: PLUGIN_YG2_INIT_TIMEOUT_MS,
+            failureReason: '',
+            capabilities: {
+                loadingApi: null,
+                playerData: null,
+                leaderboard: null,
+                fullscreenAds: null
+            }
+        };
         const NO_DATA = 'no data';
 
         document.addEventListener('contextmenu', event => event.preventDefault());
@@ -214,11 +229,13 @@
 
         const PauseCallback = () => {
             isPausedGame = true;
+            LogStyledMessage('[RobotArena.Platform] PluginYG2 platform pause=true');
             YG2Instance('SetPauseGame', 'true');
         };
 
         const ResumeCallback = () => {
             isPausedGame = false;
+            LogStyledMessage('[RobotArena.Platform] PluginYG2 platform pause=false');
             YG2Instance('SetPauseGame', 'false');
             FocusGame(false);
         };
@@ -227,6 +244,9 @@
         script.src = loaderUrl;
         script.onload = () => {
             StartUnityInstance = function () {
+                if (unityStartRequested) return;
+                unityStartRequested = true;
+
                 createUnityInstance(canvas, config, (progress) => {
                     spinner.style.display = "none";
                     progressBarEmpty.style.display = "";
@@ -252,7 +272,7 @@
         };
 
         function StartUnityInstance_IfUnloaded() {
-            if (spinner.style.display !== "none")
+            if (StartUnityInstance && spinner.style.display !== "none")
                 StartUnityInstance();
         }
 
@@ -307,13 +327,60 @@
             console.log('%c' + message, style);
         }
 
-        async function InitYSDK() {
-            try {
-                if (IsLocalHost()) return;
+        function SetPluginYG2InitState(state, failureReason = '') {
+            window.__robotArenaPluginYG2.initState = state;
+            window.__robotArenaPluginYG2.initFinishedAt = Date.now();
+            window.__robotArenaPluginYG2.failureReason = failureReason;
+            LogStyledMessage(
+                '[RobotArena.Platform] PluginYG2 SDK init state=' + state
+                + (failureReason ? '; reason=' + failureReason : ''));
+        }
 
-                ysdk = await YaGames.init();
+        function RecordPluginYG2Capabilities() {
+            const features = ysdk && ysdk.features ? ysdk.features : {};
+            const advertising = ysdk && ysdk.adv ? ysdk.adv : {};
+            window.__robotArenaPluginYG2.capabilities = {
+                loadingApi: Boolean(features.LoadingAPI),
+                playerData: Boolean(ysdk && typeof ysdk.getPlayer === 'function'),
+                leaderboard: Boolean(ysdk && typeof ysdk.getLeaderboards === 'function'),
+                fullscreenAds: Boolean(advertising &&
+                    typeof advertising.showFullscreenAdv === 'function')
+            };
+            LogStyledMessage(
+                '[RobotArena.Platform] PluginYG2 capability report='
+                + JSON.stringify(window.__robotArenaPluginYG2.capabilities));
+        }
+
+        async function InitYSDK() {
+            window.__robotArenaPluginYG2.initStartedAt = Date.now();
+            let timeoutHandle = null;
+            try {
+                if (IsLocalHost()) {
+                    SetPluginYG2InitState('local');
+                    return;
+                }
+
+                if (typeof YaGames === 'undefined' || typeof YaGames.init !== 'function') {
+                    throw new Error('YaGames.init is unavailable.');
+                }
+
+                const timeoutPromise = new Promise((resolve, reject) => {
+                    timeoutHandle = setTimeout(() => {
+                        const timeoutError = new Error(
+                            'YaGames.init timed out after ' + PLUGIN_YG2_INIT_TIMEOUT_MS + ' ms.');
+                        timeoutError.code = 'PLUGINYG2_INIT_TIMEOUT';
+                        reject(timeoutError);
+                    }, PLUGIN_YG2_INIT_TIMEOUT_MS);
+                });
+
+                ysdk = await Promise.race([YaGames.init(), timeoutPromise]);
+                if (!ysdk || typeof ysdk.on !== 'function') {
+                    throw new Error('YaGames.init returned an invalid SDK object.');
+                }
+
                 ysdk.on('game_api_pause', PauseCallback);
                 ysdk.on('game_api_resume', ResumeCallback);
+                RecordPluginYG2Capabilities();
 
                 // Additional init0 modules
 
@@ -327,14 +394,22 @@
                 if (ygGameInstance != null)
                     ygGameInstance.SendMessage('YG2Instance', 'InitSDKComplete');
 
+                SetPluginYG2InitState('ready');
                 LogStyledMessage('Init YandexSDK Success');
 
             } catch (e) {
-                console.error('CRASH Initialization SDK: ', e);
-            }
+                const reason = e && e.message ? e.message : String(e);
+                const state = e && e.code === 'PLUGINYG2_INIT_TIMEOUT' ? 'timeout' : 'failed';
+                SetPluginYG2InitState(state, reason);
+                console.error('[RobotArena.Platform] PluginYG2 SDK init failed: ' + reason);
+            } finally {
+                if (timeoutHandle !== null)
+                    clearTimeout(timeoutHandle);
 
-            if (!IsLocalHost() && !syncInit)
-                StartUnityInstance_IfUnloaded();
+                if (!IsLocalHost() &&
+                    (!syncInit || window.__robotArenaPluginYG2.initState !== 'ready'))
+                    StartUnityInstance_IfUnloaded();
+            }
         }
 
         function InitGame() {
