@@ -76,6 +76,7 @@ public sealed class DesktopTitleUi : MonoBehaviour
         CreateUi(canvas.transform);
         RefreshLocalizedText();
         DesktopUiFactory.Select(startButton);
+        RobotArenaPlatformServices.MarkInteractiveReady();
     }
 
     private void Update()

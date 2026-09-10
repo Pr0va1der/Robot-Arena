@@ -1,8 +1,6 @@
 using System;
-using System.Collections;
 using System.Runtime.InteropServices;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.Scripting;
 
 namespace RobotArena.Platform
@@ -66,7 +64,6 @@ namespace RobotArena.Platform
     {
         private const int ProbeTimeoutMilliseconds = 8000;
         private static RobotArenaPlatformProbe instance;
-        private Coroutine titleMenuReadyRoutine;
 
         [Serializable]
         private sealed class BridgeResult
@@ -129,7 +126,6 @@ namespace RobotArena.Platform
 
             instance = this;
             DontDestroyOnLoad(gameObject);
-            SceneManager.sceneLoaded += OnSceneLoaded;
             BeginProbe();
         }
 
@@ -137,7 +133,6 @@ namespace RobotArena.Platform
         {
             if (instance == this)
             {
-                SceneManager.sceneLoaded -= OnSceneLoaded;
                 instance = null;
             }
         }
@@ -174,36 +169,6 @@ namespace RobotArena.Platform
                 false,
                 "The Yandex SDK probe is enabled only in a WebGL player."));
 #endif
-        }
-
-        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            if (scene.name != "Title Screen")
-            {
-                return;
-            }
-
-            if (titleMenuReadyRoutine != null)
-            {
-                StopCoroutine(titleMenuReadyRoutine);
-            }
-
-            titleMenuReadyRoutine = StartCoroutine(MarkTitleMenuReadyWhenSdkIsReady());
-        }
-
-        private IEnumerator MarkTitleMenuReadyWhenSdkIsReady()
-        {
-            // Let the title canvas build its interactive controls before reporting Game Ready.
-            yield return null;
-
-            float deadline = Time.unscaledTime + ProbeTimeoutMilliseconds / 1000f;
-            while (Current != null && !Current.SdkInitialized && Time.unscaledTime < deadline)
-            {
-                yield return null;
-            }
-
-            MarkInteractiveReadyInternal();
-            titleMenuReadyRoutine = null;
         }
 
         private void MarkInteractiveReadyInternal()
