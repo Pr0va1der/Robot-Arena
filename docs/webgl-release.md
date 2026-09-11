@@ -84,8 +84,8 @@ real platform iframe. Save console and network evidence showing:
   confirmation;
 - platform-delivered pause and resume logs from
   `[RobotArena.Platform] PluginYG2 platform pause=...`;
-- no `RobotArenaPlatformProbe` initialization or general-purpose custom bridge
-  calls. The explicitly documented `RobotArenaPlatformState` and
+- no alternate platform initializer or general-purpose custom bridge calls. The
+  explicitly documented `RobotArenaPlatformState` and
   `RobotArenaYandexLifecyclePause` messages are the single narrow project-owned
   lifecycle transport channel; their `[RobotArena.PluginYG2.Transport]` logs are
   diagnostics, not acceptance evidence.

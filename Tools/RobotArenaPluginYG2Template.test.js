@@ -33,6 +33,14 @@ const backendPath = path.join(
   'Platform',
   'RobotArenaPluginYG2Backend.cs');
 const backendSource = fs.readFileSync(backendPath, 'utf8');
+const platformServicesPath = path.join(
+  __dirname,
+  '..',
+  'Assets',
+  'Scripts',
+  'Platform',
+  'RobotArenaPlatformServices.cs');
+const platformServicesSource = fs.readFileSync(platformServicesPath, 'utf8');
 const projectSettingsPath = path.join(
   __dirname,
   '..',
@@ -140,6 +148,33 @@ test('platform backend uses the PluginYG2 runtime adapter and public events', ()
   assert.match(backendSource, /WithGameReadyUnavailable/);
   assert.doesNotMatch(backendSource, /DllImport|RobotArenaPlatformProbe/);
   assert.doesNotMatch(runtimeBridgeSource, /RobotArenaRegisterYandexLifecycleToken/);
+});
+
+test('project contains no legacy probe surface after PluginYG2 cutover', () => {
+  const legacyPaths = [
+    'Assets/Editor/RobotArenaPlatformProbeBuild.cs',
+    'Assets/Editor/RobotArenaPlatformProbeBuild.cs.meta',
+    'Assets/Plugins/WebGL/RobotArenaPlatformProbe.jslib',
+    'Assets/Plugins/WebGL/RobotArenaPlatformProbe.jslib.meta',
+    'Assets/Scripts/Platform/RobotArenaPlatformProbe.cs',
+    'Assets/Scripts/Platform/RobotArenaPlatformProbe.cs.meta',
+    'Assets/Scripts/Platform/RobotArenaPlatformProbeBackend.cs',
+    'Assets/Scripts/Platform/RobotArenaPlatformProbeBackend.cs.meta',
+    'Assets/WebGLTemplates/RobotArenaYandex.meta',
+    'Assets/WebGLTemplates/RobotArenaYandex/index.html',
+    'Assets/WebGLTemplates/RobotArenaYandex/index.html.meta',
+    'Tools/RobotArenaPlatformProbeBridge.test.js',
+    'Tools/RobotArenaWebGLTemplate.test.js',
+  ];
+
+  for (const relativePath of legacyPaths) {
+    assert.equal(
+      fs.existsSync(path.join(repositoryRoot, ...relativePath.split('/'))),
+      false,
+      'legacy production surface remains: ' + relativePath);
+  }
+
+  assert.doesNotMatch(platformServicesSource, /RobotArenaPlatformProbe/);
 });
 
 test('template reports transport evidence through one explicit lifecycle channel', () => {

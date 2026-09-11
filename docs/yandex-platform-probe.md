@@ -14,10 +14,7 @@ The project uses PluginYG2 behind the project-owned `Platform Services Adapter`.
 
 ## Project-owned runtime boundary
 
-`RobotArenaPlatformServices` is installed before the first scene and owns the adapter lifetime. Its backend is selected at compile time:
-
-- `ROBOTARENA_PLUGINYG2` selects `RobotArenaPluginYG2Backend`.
-- Without that symbol, the migration-only `RobotArenaPlatformProbeBackend` wraps the legacy probe.
+`RobotArenaPlatformServices` is installed before the first scene and owns the adapter lifetime. It always creates `RobotArenaPluginYG2Backend`; when the official platform symbols are unavailable, that backend reports the deterministic guest/unavailable path. There is no alternate production provider.
 
 The adapter exposes SDK status, environment, language, capabilities, Game Ready
 state, and platform pause events. Game Ready state distinguishes a request from a
@@ -40,7 +37,7 @@ The local lifecycle check is:
 node Tools/RobotArenaMusicLifecycleSmoke.js --build Build/WebGL/RobotArenaRelease --enter-session --output Build/WebGL/RobotArenaMusicLifecycleSmoke-pluginyg2.json
 ```
 
-The current licensed Unity release candidate passed the package gate: 21,042,211 uncompressed bytes against the 80,000,000-byte budget, with zero texture-policy changes. The local browser smoke verifies Unity loading plus the focus/music lifecycle. Its `/sdk.js` response is an inert placeholder with no `YaGames` implementation, so local results are not evidence of SDK initialization or Yandex lifecycle delivery. Direct callback testing is available only as the explicitly synthetic `--synthetic-platform-pause-cycles` diagnostic.
+The current licensed Unity release candidate passed the package gate under the 80,000,000-byte budget, with zero texture-policy changes; the exact byte count is recorded in the generated release report. The local browser smoke verifies Unity loading plus the focus/music lifecycle. Its `/sdk.js` response is an inert placeholder with no `YaGames` implementation, so local results are not evidence of SDK initialization or Yandex lifecycle delivery. Direct callback testing is available only as the explicitly synthetic `--synthetic-platform-pause-cycles` diagnostic.
 
 The release command validates the official integration before building from
 `Tools/RobotArenaPluginYG2Integration.json`: PluginYG2 must match the pinned
@@ -63,10 +60,7 @@ These messages originate after data and events pass through the official `YG2`
 APIs into `RobotArenaPluginYG2Backend`; they must be captured together with the
 successful Yandex `/sdk.js` network request.
 
-The remaining production gate is the Yandex Games draft smoke in issue #38. It must confirm SDK/environment delivery, guest behavior, title-menu readiness, pause/resume, and the same music invariants in the hosted draft. The migration parent issue remains open until that human-controlled check is recorded.
-
-## Legacy probe during migration
-
-`RobotArenaPlatformProbe` remains in the repository only to support rollback and migration comparison. With `ROBOTARENA_PLUGINYG2` enabled it does not install or initialize its own runtime path, so two SDK initializers cannot be active in the release build. It may be removed after issue #38 is accepted and the final draft smoke has been recorded.
-
-The old probe build command and template are historical diagnostics, not the production release path. Do not add new gameplay dependencies on the probe or call its JavaScript bridge directly.
+The hosted Yandex Games draft smoke in issue #38 is accepted. Its evidence confirms the
+PluginYG2 path, SDK/environment delivery, title-menu readiness, pause/resume and the
+existing music invariants. The current production path has no dormant legacy provider;
+rollback is performed by selecting a prior Git commit or tag.

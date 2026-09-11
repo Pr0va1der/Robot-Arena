@@ -4,7 +4,7 @@ status: accepted
 
 # Use PluginYG2 behind the Platform Services Adapter
 
-The project will replace the custom Yandex Games Bridge with the pinned PluginYG2 `v2.0092` integration, while keeping gameplay independent of the vendor SDK through a project-owned Platform Services Adapter. The code cutover is implemented behind `ROBOTARENA_PLUGINYG2`; production adoption is gated by the Yandex Games draft smoke in issue #38.
+The project replaces the custom Yandex Games Bridge with the pinned PluginYG2 `v2.0092` integration, while keeping gameplay independent of the vendor SDK through a project-owned Platform Services Adapter. The PluginYG2 integration compiles under `ROBOTARENA_PLUGINYG2`; after the cutover, `RobotArenaPlatformServices` always selects the PluginYG2 backend, while the backend keeps a deterministic guest path when the official platform symbols are unavailable. Hosted draft acceptance is recorded in issue #38.
 
 ## Decision
 
@@ -14,10 +14,10 @@ The project will replace the custom Yandex Games Bridge with the pinned PluginYG
 - Use one narrow project-owned lifecycle diagnostics channel over the existing PluginYG2 `YGSendMessage` component when the vendor callback surface cannot carry evidence back to Unity. The channel has two typed messages, `RobotArenaPlatformState` and `RobotArenaYandexLifecyclePause`, and may report the terminal SDK state, actual capabilities, and an explicit Yandex pause/resume origin. It is not a second initializer, a general-purpose bridge, or a gameplay API.
 - Disable PluginYG2 automatic Game Ready, automatic pause policy, automatic project-setting application, and automatic define-symbol management in `Assets/PluginYourGames/Resources/SettingsYG2.asset`. The title menu marks readiness once, and the existing `PauseCoordinator` remains the authority for time, audio, cursor, and gameplay pause.
 - Build releases with the derived `RobotArenaPluginYG2` WebGL template. The template has one SDK loader and one initializer and retains PluginYG2 insertion points plus the existing canvas/browser compatibility behavior.
-- Keep the old Bridge only as a migration rollback/comparison path. It must not initialize alongside PluginYG2 and can be deleted after the draft smoke is accepted.
+- Remove the legacy Bridge, probe template and migration-only build command after the accepted draft smoke. Rollback is performed through a Git commit or tag; no dormant legacy provider remains in production.
 
 ## Consequences
 
-The project gets a maintained vendor SDK boundary and a smaller gameplay-facing contract, while preserving its existing pause and music lifecycle ownership. Plugin upgrades are deliberate package changes rather than incidental editor imports; optional platform products remain separate follow-up work. Until the draft gate passes, rollback is available by disabling the PluginYG2 define and returning to the pre-migration release path.
+The project gets a maintained vendor SDK boundary and a smaller gameplay-facing contract, while preserving its existing pause and music lifecycle ownership. Plugin upgrades are deliberate package changes rather than incidental editor imports; optional platform products remain separate follow-up work. The accepted production path contains no dormant legacy provider, and rollback is available through a prior Git commit or tag.
 
 The derived template remains the transport owner for browser-side evidence, while the backend remains the canonical owner of normalized acceptance logs and session-facing events. Vendor files are not patched to create this channel.

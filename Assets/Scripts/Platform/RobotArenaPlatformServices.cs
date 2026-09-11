@@ -62,12 +62,7 @@ public sealed class RobotArenaPlatformServices : MonoBehaviour
         instance = this;
         DontDestroyOnLoad(gameObject);
 
-#if ROBOTARENA_PLUGINYG2
         backend = new RobotArenaPluginYG2Backend();
-#else
-        RobotArenaPlatformProbe probe = RobotArenaPlatformProbe.EnsureInstalled();
-        backend = new RobotArenaPlatformProbeBackend(probe);
-#endif
         adapter = new PlatformServicesAdapter(backend);
         adapter.SnapshotChanged += OnSnapshotChanged;
         adapter.PlatformPauseChanged += OnPlatformPauseChanged;
