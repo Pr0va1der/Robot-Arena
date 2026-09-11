@@ -262,10 +262,6 @@
                 }).then((unityInstance) => {
                     ygGameInstance = unityInstance;
                     window.unityInstance = unityInstance;
-                    ygGameInstance.SendMessage(
-                        'YG2Instance',
-                        'RobotArenaRegisterYandexLifecycleToken',
-                        yandexLifecycleToken);
                     loadingCover.style.background = "";
                     loadingCover.style.display = "none";
                     FocusGame();
@@ -393,7 +389,8 @@
                 fullscreenAds: toCapabilityState(capabilities.fullscreenAds),
                 gameReadyOutcome: window.__robotArenaPluginYG2.gameReadyOutcome,
                 gameReadyFailureReason:
-                    window.__robotArenaPluginYG2.gameReadyFailureReason || ''
+                    window.__robotArenaPluginYG2.gameReadyFailureReason || '',
+                lifecycleToken: yandexLifecycleToken
             }));
         }
 

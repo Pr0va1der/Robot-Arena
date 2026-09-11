@@ -4,6 +4,50 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const EXPECTED_PLUGIN = 'PluginYG2';
+const EXPECTED_VERSION = 'v2.0092';
+const EXPECTED_VERSION_FILE = 'Assets/PluginYourGames/Version.txt';
+const EXPECTED_TEMPLATE_FILE = 'Assets/WebGLTemplates/RobotArenaPluginYG2/index.html';
+const EXPECTED_UNITY_TEMPLATE = 'PROJECT:RobotArenaPluginYG2';
+const EXPECTED_VENDOR_ROOT = 'Assets/PluginYourGames';
+const EXPECTED_PLATFORM = 'YandexGamesPlatform_yg';
+const EXPECTED_SDK_LOADER = '<script src="/sdk.js"></script>';
+const EXPECTED_SDK_INITIALIZER = 'YaGames.init()';
+const EXPECTED_SOURCE_ARCHIVE_SHA256 =
+  '8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3';
+const EXPECTED_VENDORED_FINGERPRINT =
+  'AB4551EFDB23E1DC417598F406AF2997F16080BBBCF8E9FB08CDFAFF9763395F';
+const EXPECTED_MODULES = ['Core', 'YandexGames', 'EnvirData'];
+const EXPECTED_DEFINES = [
+  'YandexGamesPlatform_yg',
+  'ROBOTARENA_PLUGINYG2',
+  'PLUGIN_YG_2',
+  'EnvirData_yg',
+];
+const REQUIRED_VENDOR_FILES = [
+  'Scripts/Basic/YG2.cs',
+  'Scripts/Basic/GameReadyAPI.cs',
+  'Platforms/YandexGames/Scripts/YandexGamePlatform.cs',
+  'Platforms/YandexGames/Plugins/YandexGame.jslib',
+  'Modules/EnvirData/Scripts/EnvirData_yg.cs',
+  'Modules/EnvirData/Plugins/EnvirData.jslib',
+];
+const EXPECTED_REQUIRED_ARTIFACT_MARKERS = [
+  'game_api_pause',
+  'game_api_resume',
+  'RequestingEnvironmentData',
+  'SetEnvirData',
+  'PluginYG2 v2.0092',
+];
+const EXPECTED_EXACTLY_ONCE_ARTIFACT_MARKERS = [
+  'game_api_pause',
+  'game_api_resume',
+];
+const EXPECTED_FORBIDDEN_ARTIFACT_MARKERS = [
+  'RobotArenaPlatformProbe',
+  '__robotArenaPlatformProbe',
+  'RobotArenaPlatformProbe_',
+];
 const IGNORED_VENDOR_FILES = new Set([
   'Editor/BuildLogYG2.txt',
   'Editor/PluginPrefs.json',
@@ -97,6 +141,57 @@ function validateManifestList(
   return values;
 }
 
+function normalizeList(values) {
+  return Array.isArray(values) ? [...values].sort() : [];
+}
+
+function hasExactValues(actual, expected) {
+  return normalizeList(actual).join('\u0000') === normalizeList(expected).join('\u0000');
+}
+
+function validatePinnedPolicy(manifest) {
+  const errors = [];
+  const expectedScalars = [
+    ['plugin', EXPECTED_PLUGIN, 'plugin identity'],
+    ['pluginVersion', EXPECTED_VERSION, 'version'],
+    ['versionFile', EXPECTED_VERSION_FILE, 'version file'],
+    ['templateFile', EXPECTED_TEMPLATE_FILE, 'template file'],
+    ['unityTemplate', EXPECTED_UNITY_TEMPLATE, 'Unity WebGL template'],
+    ['vendorRoot', EXPECTED_VENDOR_ROOT, 'vendor root'],
+    ['platform', EXPECTED_PLATFORM, 'platform'],
+    ['sdkLoader', EXPECTED_SDK_LOADER, 'SDK loader'],
+    ['sdkInitializer', EXPECTED_SDK_INITIALIZER, 'SDK initializer'],
+    ['sourceArchiveSha256', EXPECTED_SOURCE_ARCHIVE_SHA256, 'source archive SHA-256'],
+    ['vendoredFingerprint', EXPECTED_VENDORED_FINGERPRINT, 'vendored fingerprint'],
+  ];
+  for (const [fieldName, expected, label] of expectedScalars) {
+    if (manifest[fieldName] !== expected) {
+      errors.push('PluginYG2 ' + label + ' must be ' + expected + '.');
+    }
+  }
+  if (!hasExactValues(manifest.modules, EXPECTED_MODULES)) {
+    errors.push('PluginYG2 modules must be exactly Core, YandexGames, and EnvirData.');
+  }
+  if (!hasExactValues(manifest.requiredVendorFiles, REQUIRED_VENDOR_FILES)) {
+    errors.push('PluginYG2 required vendor files do not match the integration policy.');
+  }
+  if (!hasExactValues(manifest.requiredDefines, EXPECTED_DEFINES)) {
+    errors.push('PluginYG2 required defines do not match the integration policy.');
+  }
+  if (!hasExactValues(manifest.requiredArtifactMarkers, EXPECTED_REQUIRED_ARTIFACT_MARKERS)) {
+    errors.push('PluginYG2 required artifact markers do not match the integration policy.');
+  }
+  if (!hasExactValues(
+    manifest.exactlyOnceArtifactMarkers,
+    EXPECTED_EXACTLY_ONCE_ARTIFACT_MARKERS)) {
+    errors.push('PluginYG2 exactly-once artifact markers do not match the integration policy.');
+  }
+  if (!hasExactValues(manifest.forbiddenArtifactMarkers, EXPECTED_FORBIDDEN_ARTIFACT_MARKERS)) {
+    errors.push('PluginYG2 forbidden artifact markers do not match the integration policy.');
+  }
+  return errors;
+}
+
 function validateManifestShape(manifest) {
   const errors = [];
   for (const fieldName of [
@@ -170,11 +265,12 @@ function validateProvenance({ manifest, vendorRoot, archivePath, requireArchive 
 
   const manifestShape = validateManifestShape(manifest);
   errors.push(...manifestShape.errors);
+  errors.push(...validatePinnedPolicy(manifest));
 
   if (!vendorRoot || !fs.existsSync(vendorRoot)) {
     errors.push('Vendored PluginYG2 directory is missing.');
   } else {
-    for (const relativePath of manifest.requiredVendorFiles || []) {
+    for (const relativePath of REQUIRED_VENDOR_FILES) {
       if (typeof relativePath !== 'string' ||
           relativePath.length === 0 ||
           !isSafeRelativePath(relativePath)) {
@@ -189,13 +285,16 @@ function validateProvenance({ manifest, vendorRoot, archivePath, requireArchive 
     const modulesRoot = path.join(vendorRoot, 'Modules');
     if (fs.existsSync(modulesRoot)) {
       for (const entry of fs.readdirSync(modulesRoot, { withFileTypes: true })) {
-        if (entry.isDirectory() && !manifestShape.modules.includes(entry.name)) {
+        if (entry.isDirectory() && entry.name !== 'EnvirData') {
           errors.push(`Unsupported PluginYG2 module directory is present: ${entry.name}.`);
         }
       }
     }
 
     const actualFingerprint = computeVendoredFingerprint(vendorRoot);
+    if (manifest.vendoredFingerprint !== EXPECTED_VENDORED_FINGERPRINT) {
+      errors.push('PluginYG2 vendored fingerprint does not match the pinned import receipt.');
+    }
     if (isSha256(manifest.vendoredFingerprint) &&
         manifest.vendoredFingerprint !== actualFingerprint) {
       errors.push(
@@ -291,6 +390,22 @@ if (require.main === module) {
 }
 
 module.exports = {
+  EXPECTED_DEFINES,
+  EXPECTED_MODULES,
+  EXPECTED_PLATFORM,
+  EXPECTED_PLUGIN,
+  EXPECTED_SOURCE_ARCHIVE_SHA256,
+  EXPECTED_TEMPLATE_FILE,
+  EXPECTED_UNITY_TEMPLATE,
+  EXPECTED_VENDOR_ROOT,
+  EXPECTED_VERSION,
+  EXPECTED_VERSION_FILE,
+  EXPECTED_SDK_INITIALIZER,
+  EXPECTED_SDK_LOADER,
+  EXPECTED_REQUIRED_ARTIFACT_MARKERS,
+  EXPECTED_EXACTLY_ONCE_ARTIFACT_MARKERS,
+  EXPECTED_FORBIDDEN_ARTIFACT_MARKERS,
+  EXPECTED_VENDORED_FINGERPRINT,
   computeFileSha256,
   computeVendoredFingerprint,
   getVendorFiles,

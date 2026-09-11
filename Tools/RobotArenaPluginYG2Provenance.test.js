@@ -69,7 +69,7 @@ test('provenance validation rejects malformed manifest coordinates', () => {
   assert.ok(errors.some(error => error.includes('fingerprint')));
 });
 
-test('provenance validation accepts changed coordinates declared by the manifest', () => {
+test('provenance validation rejects changed policy coordinates', () => {
   const mutatedManifest = {
     ...manifest,
     pluginVersion: 'v2.0091',
@@ -92,7 +92,15 @@ test('provenance validation accepts changed coordinates declared by the manifest
     requireArchive: false,
   });
 
-  assert.equal(errors.length, 0);
+  assert.ok(errors.some(error => error.includes('version')));
+  assert.ok(errors.some(error => error.includes('template')));
+  assert.ok(errors.some(error => error.includes('platform')));
+  assert.ok(errors.some(error => error.includes('SDK loader')));
+  assert.ok(errors.some(error => error.includes('SDK initializer')));
+  assert.ok(errors.some(error => error.includes('archive SHA-256')));
+  assert.ok(errors.some(error => error.includes('modules')));
+  assert.ok(errors.some(error => error.includes('required defines')));
+  assert.ok(errors.some(error => error.includes('artifact markers')));
 });
 
 test('provenance validation rejects manifest paths outside declared roots', () => {
@@ -129,7 +137,7 @@ test('provenance validation requires an explicit forbidden-marker list', () => {
   assert.ok(errors.some(error => error.includes('forbiddenArtifactMarkers')));
 });
 
-test('provenance validation has no hidden copy for each declared coordinate', () => {
+test('provenance validation rejects every fixed policy coordinate drift', () => {
   const coordinateVariants = {
     plugin: 'CustomPlugin',
     pluginVersion: 'v9.0.0',
@@ -146,6 +154,7 @@ test('provenance validation has no hidden copy for each declared coordinate', ()
     exactlyOnceArtifactMarkers: ['custom-marker'],
     forbiddenArtifactMarkers: ['legacy-custom-marker'],
     sourceArchiveSha256: '0'.repeat(64),
+    vendoredFingerprint: '1'.repeat(64),
   };
 
   for (const [fieldName, value] of Object.entries(coordinateVariants)) {
@@ -162,14 +171,14 @@ test('provenance validation has no hidden copy for each declared coordinate', ()
     if (fieldName === 'requiredDefines') {
       candidateManifest.platform = value[0];
     }
-    assert.deepEqual(
-      provenance.validateProvenance({
-        manifest: candidateManifest,
-        vendorRoot,
-        requireArchive: false,
-      }),
-      [],
-      `manifest field ${fieldName} was rejected by a hidden policy copy`);
+    const errors = provenance.validateProvenance({
+      manifest: candidateManifest,
+      vendorRoot,
+      requireArchive: false,
+    });
+    assert.ok(
+      errors.length > 0,
+      'manifest field ' + fieldName + ' was not rejected by the fixed policy');
   }
 });
 
@@ -212,7 +221,7 @@ test('offline archive verification compares the actual archive bytes', () => {
   }
 });
 
-test('provenance validation follows the manifest coordinates without hidden policy copies', () => {
+test('provenance validation rejects a self-consistent custom policy manifest', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'robot-arena-manifest-policy-'));
   const vendorRoot = path.join(temporaryRoot, 'vendor');
   const requiredVendorPath = path.join(vendorRoot, 'Custom', 'Required.txt');
@@ -246,12 +255,13 @@ test('provenance validation follows the manifest coordinates without hidden poli
     };
     customManifest.vendoredFingerprint = provenance.computeVendoredFingerprint(vendorRoot);
 
-    assert.deepEqual(provenance.validateProvenance({
+    const errors = provenance.validateProvenance({
       manifest: customManifest,
       vendorRoot,
       archivePath,
       requireArchive: true,
-    }), []);
+    });
+    assert.ok(errors.length > 0);
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }

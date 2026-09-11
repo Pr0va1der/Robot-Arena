@@ -281,14 +281,25 @@ test('explicit pause callbacks use the narrow platform-origin message', async ()
   harness.sdkHandlers.get('game_api_resume')();
   await harness.settle();
 
+  const stateMessage = harness.messages.find(
+    message => message.method === 'RobotArenaPlatformState');
+  assert.ok(stateMessage);
+  const lifecycleToken = JSON.parse(stateMessage.argument).lifecycleToken;
+  assert.equal(typeof lifecycleToken, 'string');
+  assert.ok(lifecycleToken.length > 0);
+
   assert.deepEqual(
     harness.messages
       .filter(message => message.method === 'RobotArenaYandexLifecyclePause')
       .map(message => JSON.parse(message.argument))
-      .map(message => ({ source: message.source, state: message.state })),
+      .map(message => ({
+        source: message.source,
+        state: message.state,
+        token: message.token,
+      })),
     [
-      { source: 'yandex-lifecycle', state: 'paused' },
-      { source: 'yandex-lifecycle', state: 'resumed' },
+      { source: 'yandex-lifecycle', state: 'paused', token: lifecycleToken },
+      { source: 'yandex-lifecycle', state: 'resumed', token: lifecycleToken },
     ]);
   assert.doesNotMatch(harness.logs.join('\n'), /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
 });
@@ -322,6 +333,12 @@ test('platform pause received before Unity is ready is delivered after Unity sta
   harness.resolveUnity();
   await harness.settle(40);
 
+  const stateIndex = harness.messages.findIndex(
+    message => message.method === 'RobotArenaPlatformState');
+  const pauseIndex = harness.messages.findIndex(
+    message => message.method === 'RobotArenaYandexLifecyclePause');
+  assert.ok(stateIndex >= 0);
+  assert.ok(pauseIndex > stateIndex);
   assert.deepEqual(
     harness.messages
       .filter(message => message.method === 'RobotArenaYandexLifecyclePause')

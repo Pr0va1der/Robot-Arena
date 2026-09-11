@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using RobotArena.WebGL.Editor;
@@ -43,6 +44,7 @@ namespace RobotArena.WebGL.Editor.Tests
         [Test]
         public void Configuration_failure_runs_common_finally_and_writes_full_failure_report()
         {
+            File.WriteAllText(reportPath, "keep this report");
             string lastSuccessfulCandidate = Path.Combine(
                 temporaryDirectory,
                 "last-successful-candidate.txt");
@@ -60,11 +62,12 @@ namespace RobotArena.WebGL.Editor.Tests
 
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain("release configuration is invalid"));
-            Assert.That(File.Exists(reportPath), Is.True);
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
+            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("keep this report"));
             Assert.That(File.ReadAllText(lastSuccessfulCandidate), Is.EqualTo("keep this candidate"));
             Assert.That(operations.BuildCallCount, Is.Zero);
 
-            ReleaseReportProbe report = ReadReport();
+            ReleaseReportProbe report = ReadAttemptReport();
             Assert.That(report.validationStage, Is.EqualTo("configuration"));
             foreach (string requiredDefine in Manifest.requiredDefines)
             {
@@ -114,7 +117,7 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(failure.Message, Does.Contain("release build failed: Failed"));
             Assert.That(operations.BuildCallCount, Is.EqualTo(1));
 
-            ReleaseReportProbe report = ReadReport();
+            ReleaseReportProbe report = ReadAttemptReport();
             Assert.That(report.validationStage, Is.EqualTo("build"));
             Assert.That(report.buildResult, Is.EqualTo("Failed"));
             Assert.That(report.artifactValidationCompleted, Is.False);
@@ -130,6 +133,7 @@ namespace RobotArena.WebGL.Editor.Tests
                 Path.Combine(outputDirectory, "last-successful.txt"),
                 "keep this candidate");
             File.WriteAllText(archivePath, "last successful archive");
+            File.WriteAllText(reportPath, "last successful report");
 
             var operations = new ControlledReleaseOperations
             {
@@ -143,6 +147,8 @@ namespace RobotArena.WebGL.Editor.Tests
                 File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
                 Is.EqualTo("keep this candidate"));
             Assert.That(File.ReadAllText(archivePath), Is.EqualTo("last successful archive"));
+            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("last successful report"));
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
             Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
             Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
         }
@@ -155,6 +161,7 @@ namespace RobotArena.WebGL.Editor.Tests
                 Path.Combine(outputDirectory, "last-successful.txt"),
                 "replace this candidate");
             File.WriteAllText(archivePath, "replace this archive");
+            File.WriteAllText(reportPath, "replace this report");
 
             RobotArenaWebGLReleaseBuild.RunReleasePackage(
                 CreateContext(new ControlledReleaseOperations()));
@@ -166,10 +173,17 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(File.Exists(archivePath), Is.True);
             Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
             Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.False);
 
             ReleaseReportProbe report = ReadReport();
             Assert.That(report.validationStage, Is.EqualTo("promotion"));
             Assert.That(report.releaseIsUploadReady, Is.True);
+            Assert.That(
+                report.artifactChecksumSha256,
+                Is.EqualTo(ComputeSha256(Path.Combine(outputDirectory, "index.html"))));
+            Assert.That(
+                report.archiveChecksumSha256,
+                Is.EqualTo(ComputeSha256(archivePath)));
         }
 
         [Test]
@@ -180,6 +194,7 @@ namespace RobotArena.WebGL.Editor.Tests
                 Path.Combine(outputDirectory, "last-successful.txt"),
                 "keep this candidate");
             Directory.CreateDirectory(archivePath);
+            File.WriteAllText(reportPath, "keep this report");
 
             Assert.Throws<BuildFailedException>(
                 () => RobotArenaWebGLReleaseBuild.RunReleasePackage(
@@ -189,10 +204,12 @@ namespace RobotArena.WebGL.Editor.Tests
                 File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
                 Is.EqualTo("keep this candidate"));
             Assert.That(Directory.Exists(archivePath), Is.True);
+            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("keep this report"));
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
             Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
             Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
 
-            ReleaseReportProbe report = ReadReport();
+            ReleaseReportProbe report = ReadAttemptReport();
             Assert.That(report.validationStage, Is.EqualTo("promotion"));
             Assert.That(report.releaseIsUploadReady, Is.False);
         }
@@ -229,7 +246,7 @@ namespace RobotArena.WebGL.Editor.Tests
         [Test]
         public void Report_writer_failure_does_not_mask_the_original_gate_failure()
         {
-            Directory.CreateDirectory(reportPath);
+            Directory.CreateDirectory(reportPath + ".candidate");
             var operations = new ControlledReleaseOperations();
 
             LogAssert.Expect(
@@ -241,7 +258,7 @@ namespace RobotArena.WebGL.Editor.Tests
 
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain("release configuration is invalid"));
-            Assert.That(Directory.Exists(reportPath), Is.True);
+            Assert.That(Directory.Exists(reportPath + ".candidate"), Is.True);
         }
 
         [TestCase(ControlledFailureStage.Artifact, "artifact")]
@@ -262,9 +279,9 @@ namespace RobotArena.WebGL.Editor.Tests
 
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain(expectedStage));
-            Assert.That(File.Exists(reportPath), Is.True);
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
 
-            ReleaseReportProbe report = ReadReport();
+            ReleaseReportProbe report = ReadAttemptReport();
             Assert.That(report.validationStage, Is.EqualTo(expectedStage));
             Assert.That(report.buildResult, Is.EqualTo("Succeeded"));
             Assert.That(report.releaseIsUploadReady, Is.False);
@@ -335,6 +352,21 @@ namespace RobotArena.WebGL.Editor.Tests
         private ReleaseReportProbe ReadReport()
         {
             return JsonUtility.FromJson<ReleaseReportProbe>(File.ReadAllText(reportPath));
+        }
+
+        private ReleaseReportProbe ReadAttemptReport()
+        {
+            return JsonUtility.FromJson<ReleaseReportProbe>(
+                File.ReadAllText(reportPath + ".candidate"));
+        }
+
+        private static string ComputeSha256(string filePath)
+        {
+            using (SHA256 hash = SHA256.Create())
+            {
+                return BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(filePath)))
+                    .Replace("-", string.Empty);
+            }
         }
 
         public enum ControlledFailureStage

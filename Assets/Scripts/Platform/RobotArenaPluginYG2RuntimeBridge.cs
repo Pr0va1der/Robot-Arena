@@ -33,6 +33,7 @@ namespace RobotArena.Platform
         public string fullscreenAds;
         public string gameReadyOutcome;
         public string gameReadyFailureReason;
+        public string lifecycleToken;
     }
 
     public sealed class RobotArenaPluginYG2PlatformPauseEvent
@@ -84,6 +85,7 @@ namespace RobotArena.Platform
                     JsonUtility.FromJson<RobotArenaPluginYG2RuntimeState>(json);
                 if (state != null)
                 {
+                    RegisterYandexLifecycleToken(state.lifecycleToken);
                     StateChanged?.Invoke(state);
                 }
             }
@@ -95,7 +97,7 @@ namespace RobotArena.Platform
             }
         }
 
-        internal static void RegisterYandexLifecycleToken(string token)
+        private static void RegisterYandexLifecycleToken(string token)
         {
             if (string.IsNullOrEmpty(token))
             {
@@ -209,11 +211,6 @@ namespace YG.Insides
         public void RobotArenaPlatformState(string json)
         {
             RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel.PublishStateJson(json);
-        }
-
-        public void RobotArenaRegisterYandexLifecycleToken(string token)
-        {
-            RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel.RegisterYandexLifecycleToken(token);
         }
 
         public void RobotArenaYandexLifecyclePause(string json)

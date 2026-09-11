@@ -146,6 +146,60 @@ namespace RobotArena.WebGL.Editor
         private const string ReleaseReport = "Build/WebGL/RobotArenaRelease-report.json";
         private const string PluginYG2IntegrationManifestPath =
             "Tools/RobotArenaPluginYG2Integration.json";
+        private const string ExpectedPluginYG2 = "PluginYG2";
+        private const string ExpectedPluginYG2Version = "v2.0092";
+        private const string ExpectedPluginYG2VersionFile =
+            "Assets/PluginYourGames/Version.txt";
+        private const string ExpectedPluginYG2TemplateFile =
+            "Assets/WebGLTemplates/RobotArenaPluginYG2/index.html";
+        private const string ExpectedPluginYG2UnityTemplate =
+            "PROJECT:RobotArenaPluginYG2";
+        private const string ExpectedPluginYG2VendorRoot =
+            "Assets/PluginYourGames";
+        private const string ExpectedPluginYG2Platform = "YandexGamesPlatform_yg";
+        private const string ExpectedPluginYG2SdkLoader = "<script src=\"/sdk.js\"></script>";
+        private const string ExpectedPluginYG2SdkInitializer = "YaGames.init()";
+        private const string ExpectedPluginYG2SourceArchiveSha256 =
+            "8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3";
+        private const string ExpectedPluginYG2VendoredFingerprint =
+            "AB4551EFDB23E1DC417598F406AF2997F16080BBBCF8E9FB08CDFAFF9763395F";
+        private static readonly string[] ExpectedPluginYG2Modules =
+            { "Core", "YandexGames", "EnvirData" };
+        private static readonly string[] RequiredPluginYG2VendorFiles =
+        {
+            "Scripts/Basic/YG2.cs",
+            "Scripts/Basic/GameReadyAPI.cs",
+            "Platforms/YandexGames/Scripts/YandexGamePlatform.cs",
+            "Platforms/YandexGames/Plugins/YandexGame.jslib",
+            "Modules/EnvirData/Scripts/EnvirData_yg.cs",
+            "Modules/EnvirData/Plugins/EnvirData.jslib"
+        };
+        private static readonly string[] ExpectedPluginYG2Defines =
+        {
+            "YandexGamesPlatform_yg",
+            "ROBOTARENA_PLUGINYG2",
+            "PLUGIN_YG_2",
+            "EnvirData_yg"
+        };
+        private static readonly string[] ExpectedPluginYG2RequiredArtifactMarkers =
+        {
+            "game_api_pause",
+            "game_api_resume",
+            "RequestingEnvironmentData",
+            "SetEnvirData",
+            "PluginYG2 v2.0092"
+        };
+        private static readonly string[] ExpectedPluginYG2ExactlyOnceArtifactMarkers =
+        {
+            "game_api_pause",
+            "game_api_resume"
+        };
+        private static readonly string[] ExpectedPluginYG2ForbiddenArtifactMarkers =
+        {
+            "RobotArenaPlatformProbe",
+            "__robotArenaPlatformProbe",
+            "RobotArenaPlatformProbe_"
+        };
 
         [MenuItem("Robot Arena/Build WebGL release package")]
         public static void BuildReleasePackage()
@@ -165,6 +219,7 @@ namespace RobotArena.WebGL.Editor
             string reportPath = context.ReportPath;
             string candidateOutputDirectory = GetCandidateOutputPath(outputDirectory);
             string candidateArchivePath = GetCandidateArchivePath(archivePath);
+            string candidateReportPath = GetCandidateReportPath(reportPath);
 
             string previousTemplate = PlayerSettings.WebGL.template;
             WebGLTextureSubtarget previousSubtarget = EditorUserBuildSettings.webGLBuildSubtarget;
@@ -195,7 +250,7 @@ namespace RobotArena.WebGL.Editor
                 context.Operations.PreparePaths(
                     candidateOutputDirectory,
                     candidateArchivePath,
-                    reportPath);
+                    candidateReportPath);
 
                 validationStage = RobotArenaReleaseValidationStage.Configuration;
                 if (string.IsNullOrEmpty(context.TemplateName))
@@ -305,13 +360,27 @@ namespace RobotArena.WebGL.Editor
                 }
 
                 validationStage = RobotArenaReleaseValidationStage.Promotion;
+                releaseIsUploadReady = true;
+                WriteReport(
+                    candidateReportPath,
+                    candidateOutputDirectory,
+                    buildResult,
+                    packageResult,
+                    artifactValidation,
+                    archiveValidation,
+                    candidateArchivePath,
+                    changedTextureCount,
+                    validationStage,
+                    validationErrors,
+                    releaseIsUploadReady);
                 PromoteSuccessfulCandidate(
                     candidateOutputDirectory,
                     candidateArchivePath,
+                    candidateReportPath,
                     outputDirectory,
-                    archivePath);
+                    archivePath,
+                    reportPath);
                 candidatePromoted = true;
-                releaseIsUploadReady = true;
 
                 Debug.Log(
                     "Robot Arena WebGL release package created: "
@@ -322,6 +391,7 @@ namespace RobotArena.WebGL.Editor
             }
             catch (Exception exception)
             {
+                releaseIsUploadReady = false;
                 string failure = GetValidationStageName(validationStage) + ": " + exception.Message;
                 if (!validationErrors.Contains(failure))
                 {
@@ -339,24 +409,21 @@ namespace RobotArena.WebGL.Editor
             {
                 try
                 {
-                    string reportOutputDirectory = candidatePromoted
-                        ? outputDirectory
-                        : candidateOutputDirectory;
-                    string reportArchivePath = candidatePromoted
-                        ? archivePath
-                        : candidateArchivePath;
-                    WriteReport(
-                        reportPath,
-                        reportOutputDirectory,
-                        buildResult,
-                        packageResult,
-                        artifactValidation,
-                        archiveValidation,
-                        reportArchivePath,
-                        changedTextureCount,
-                        validationStage,
-                        validationErrors,
-                        releaseIsUploadReady);
+                    if (!candidatePromoted)
+                    {
+                        WriteReport(
+                            candidateReportPath,
+                            candidateOutputDirectory,
+                            buildResult,
+                            packageResult,
+                            artifactValidation,
+                            archiveValidation,
+                            candidateArchivePath,
+                            changedTextureCount,
+                            validationStage,
+                            validationErrors,
+                            releaseIsUploadReady);
+                    }
                 }
                 catch (Exception reportException)
                 {
@@ -380,8 +447,14 @@ namespace RobotArena.WebGL.Editor
 
                 if (!candidatePromoted)
                 {
-                    DeleteCandidatePath(candidateOutputDirectory, directory: true);
-                    DeleteCandidatePath(candidateArchivePath, directory: false);
+                    TryDeleteReleasePath(
+                        candidateOutputDirectory,
+                        directory: true,
+                        requiredMarker: ".candidate");
+                    TryDeleteReleasePath(
+                        candidateArchivePath,
+                        directory: false,
+                        requiredMarker: ".candidate");
                 }
             }
         }
@@ -391,14 +464,8 @@ namespace RobotArena.WebGL.Editor
             string projectRoot = GetProjectRootPath();
             var manifestErrors = new List<string>();
             PluginYG2IntegrationManifest manifest = LoadPluginYG2Manifest(manifestErrors);
-            string pluginVersionPath = manifest == null ||
-                                       !IsSafeRelativePath(manifest.versionFile)
-                ? string.Empty
-                : Path.Combine(projectRoot, manifest.versionFile);
-            string templatePath = manifest == null ||
-                                  !IsSafeRelativePath(manifest.templateFile)
-                ? string.Empty
-                : Path.Combine(projectRoot, manifest.templateFile);
+            string pluginVersionPath = Path.Combine(projectRoot, ExpectedPluginYG2VersionFile);
+            string templatePath = Path.Combine(projectRoot, ExpectedPluginYG2TemplateFile);
             return new RobotArenaWebGLReleaseBuildContext(
                 ReleaseOutput,
                 ReleaseArchive,
@@ -589,9 +656,21 @@ namespace RobotArena.WebGL.Editor
             public void PreparePaths(string outputDirectory, string archivePath, string reportPath)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(reportPath));
-                DeleteGeneratedPath(outputDirectory, true);
-                DeleteGeneratedPath(archivePath, false);
-                DeleteGeneratedPath(reportPath, false);
+                TryDeleteReleasePath(
+                    outputDirectory,
+                    directory: true,
+                    requiredMarker: ".candidate",
+                    warnOnly: false);
+                TryDeleteReleasePath(
+                    archivePath,
+                    directory: false,
+                    requiredMarker: ".candidate",
+                    warnOnly: false);
+                TryDeleteReleasePath(
+                    reportPath,
+                    directory: false,
+                    requiredMarker: ".candidate",
+                    warnOnly: false);
             }
 
             public RobotArenaReleaseValidationResult ValidateConfiguration(
@@ -1063,14 +1142,101 @@ namespace RobotArena.WebGL.Editor
             ValidateRelativeManifestPath(errors, "templateFile", manifest.templateFile);
             ValidateRelativeManifestPath(errors, "vendorRoot", manifest.vendorRoot);
 
+            if (!string.Equals(manifest.plugin, ExpectedPluginYG2, StringComparison.Ordinal))
+            {
+                errors.Add("Manifest plugin must be PluginYG2.");
+            }
+
+            if (!string.Equals(
+                    manifest.pluginVersion,
+                    ExpectedPluginYG2Version,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest pluginVersion must be the pinned official version: "
+                    + ExpectedPluginYG2Version
+                    + ".");
+            }
+
+            if (!string.Equals(
+                    manifest.versionFile,
+                    ExpectedPluginYG2VersionFile,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest versionFile must be the pinned PluginYG2 version path: "
+                    + ExpectedPluginYG2VersionFile
+                    + ".");
+            }
+
+            if (!string.Equals(
+                    manifest.templateFile,
+                    ExpectedPluginYG2TemplateFile,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest templateFile must be the pinned PluginYG2 template path: "
+                    + ExpectedPluginYG2TemplateFile
+                    + ".");
+            }
+
+            if (!string.Equals(
+                    manifest.unityTemplate,
+                    ExpectedPluginYG2UnityTemplate,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest unityTemplate must be the pinned PluginYG2 template: "
+                    + ExpectedPluginYG2UnityTemplate
+                    + ".");
+            }
+
+            if (!string.Equals(
+                    manifest.vendorRoot,
+                    ExpectedPluginYG2VendorRoot,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest vendorRoot must be the pinned PluginYG2 vendor root: "
+                    + ExpectedPluginYG2VendorRoot
+                    + ".");
+            }
+
+            if (!string.Equals(
+                    manifest.platform,
+                    ExpectedPluginYG2Platform,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest platform must be the official PluginYG2 platform: "
+                    + ExpectedPluginYG2Platform
+                    + ".");
+            }
+
             if (!IsSha256(manifest.sourceArchiveSha256))
             {
                 errors.Add("Manifest sourceArchiveSha256 must be a 64-character hexadecimal hash.");
+            }
+            else if (!string.Equals(
+                         manifest.sourceArchiveSha256,
+                         ExpectedPluginYG2SourceArchiveSha256,
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(
+                    "Manifest sourceArchiveSha256 does not match the pinned PluginYG2 archive receipt.");
             }
 
             if (!IsSha256(manifest.vendoredFingerprint))
             {
                 errors.Add("Manifest vendoredFingerprint must be a 64-character hexadecimal hash.");
+            }
+            else if (!string.Equals(
+                         manifest.vendoredFingerprint,
+                         ExpectedPluginYG2VendoredFingerprint,
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(
+                    "Manifest vendoredFingerprint does not match the pinned PluginYG2 import receipt.");
             }
 
             ValidateManifestList(errors, "modules", manifest.modules);
@@ -1090,6 +1256,72 @@ namespace RobotArena.WebGL.Editor
                     errors,
                     "requiredVendorFiles entry",
                     requiredVendorFile);
+            }
+
+            if (!HasExactValues(manifest.modules, ExpectedPluginYG2Modules))
+            {
+                errors.Add(
+                    "Manifest modules must contain only Core, YandexGames, and EnvirData.");
+            }
+
+            if (!HasExactValues(
+                    manifest.requiredVendorFiles,
+                    RequiredPluginYG2VendorFiles))
+            {
+                errors.Add(
+                    "Manifest requiredVendorFiles do not match the PluginYG2 integration policy.");
+            }
+
+            if (!HasExactValues(manifest.requiredDefines, ExpectedPluginYG2Defines))
+            {
+                errors.Add(
+                    "Manifest requiredDefines do not match the pinned PluginYG2 defines.");
+            }
+
+            if (!string.Equals(
+                    manifest.sdkLoader,
+                    ExpectedPluginYG2SdkLoader,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest sdkLoader must be the official PluginYG2 loader: "
+                    + ExpectedPluginYG2SdkLoader
+                    + ".");
+            }
+
+            if (!string.Equals(
+                    manifest.sdkInitializer,
+                    ExpectedPluginYG2SdkInitializer,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    "Manifest sdkInitializer must be the official PluginYG2 initializer: "
+                    + ExpectedPluginYG2SdkInitializer
+                    + ".");
+            }
+
+            if (!HasExactValues(
+                    manifest.requiredArtifactMarkers,
+                    ExpectedPluginYG2RequiredArtifactMarkers))
+            {
+                errors.Add(
+                    "Manifest requiredArtifactMarkers do not match the PluginYG2 invariants.");
+            }
+
+            if (!HasExactValues(
+                    manifest.exactlyOnceArtifactMarkers,
+                    ExpectedPluginYG2ExactlyOnceArtifactMarkers))
+            {
+                errors.Add(
+                    "Manifest exactlyOnceArtifactMarkers do not match the PluginYG2 invariants.");
+            }
+
+            if (!HasExactValues(
+                    manifest.forbiddenArtifactMarkers,
+                    ExpectedPluginYG2ForbiddenArtifactMarkers))
+            {
+                errors.Add(
+                    "Manifest forbiddenArtifactMarkers do not match the legacy bridge policy.");
             }
 
             if (!string.IsNullOrEmpty(manifest.platform) &&
@@ -1120,19 +1352,17 @@ namespace RobotArena.WebGL.Editor
             PluginYG2IntegrationManifest manifest)
         {
             var errors = new List<string>();
-            string vendorRoot = IsSafeRelativePath(manifest.vendorRoot)
-                ? Path.Combine(GetProjectRootPath(), manifest.vendorRoot)
-                : string.Empty;
+            string vendorRoot = Path.Combine(GetProjectRootPath(), ExpectedPluginYG2VendorRoot);
             if (!Directory.Exists(vendorRoot))
             {
                 errors.Add(
                     "Vendored PluginYG2 directory is missing: "
-                    + manifest.vendorRoot
+                    + ExpectedPluginYG2VendorRoot
                     + ".");
                 return errors;
             }
 
-            foreach (string relativePath in manifest.requiredVendorFiles ?? new string[0])
+            foreach (string relativePath in RequiredPluginYG2VendorFiles)
             {
                 if (!File.Exists(Path.Combine(vendorRoot, relativePath.Replace('/', Path.DirectorySeparatorChar))))
                 {
@@ -1160,7 +1390,7 @@ namespace RobotArena.WebGL.Editor
                 foreach (DirectoryInfo moduleDirectory in new DirectoryInfo(modulesRoot).GetDirectories())
                 {
                     bool isDeclaredModule = false;
-                    foreach (string module in manifest.modules ?? new string[0])
+                    foreach (string module in ExpectedPluginYG2Modules)
                     {
                         if (string.Equals(moduleDirectory.Name, module, StringComparison.Ordinal))
                         {
@@ -1325,6 +1555,30 @@ namespace RobotArena.WebGL.Editor
             {
                 errors.Add("Manifest " + fieldName + " must not contain duplicates.");
             }
+        }
+
+        private static bool HasExactValues(string[] actual, string[] expected)
+        {
+            if (actual == null || expected == null || actual.Length != expected.Length)
+            {
+                return false;
+            }
+
+            var actualValues = new HashSet<string>(actual, StringComparer.Ordinal);
+            if (actualValues.Count != expected.Length)
+            {
+                return false;
+            }
+
+            foreach (string expectedValue in expected)
+            {
+                if (!actualValues.Contains(expectedValue))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static void AddPluginYG2ArtifactWideErrors(
@@ -1493,11 +1747,18 @@ namespace RobotArena.WebGL.Editor
             return archivePath + ".candidate";
         }
 
+        private static string GetCandidateReportPath(string reportPath)
+        {
+            return reportPath + ".candidate";
+        }
+
         private static void PromoteSuccessfulCandidate(
             string candidateOutputDirectory,
             string candidateArchivePath,
+            string candidateReportPath,
             string outputDirectory,
-            string archivePath)
+            string archivePath,
+            string reportPath)
         {
             if (!Directory.Exists(candidateOutputDirectory))
             {
@@ -1513,13 +1774,23 @@ namespace RobotArena.WebGL.Editor
                     + candidateArchivePath);
             }
 
+            if (!File.Exists(candidateReportPath))
+            {
+                throw new InvalidOperationException(
+                    "Successful release candidate report is missing: "
+                    + candidateReportPath);
+            }
+
             string suffix = ".backup-" + Guid.NewGuid().ToString("N");
             string outputBackupPath = outputDirectory + suffix;
             string archiveBackupPath = archivePath + suffix;
+            string reportBackupPath = reportPath + suffix;
             bool outputBackupCreated = false;
             bool archiveBackupCreated = false;
+            bool reportBackupCreated = false;
             bool outputPromoted = false;
             bool archivePromoted = false;
+            bool reportPromoted = false;
 
             try
             {
@@ -1535,13 +1806,26 @@ namespace RobotArena.WebGL.Editor
                     archiveBackupCreated = true;
                 }
 
+                if (File.Exists(reportPath))
+                {
+                    File.Move(reportPath, reportBackupPath);
+                    reportBackupCreated = true;
+                }
+
                 Directory.Move(candidateOutputDirectory, outputDirectory);
                 outputPromoted = true;
                 File.Move(candidateArchivePath, archivePath);
                 archivePromoted = true;
+                File.Move(candidateReportPath, reportPath);
+                reportPromoted = true;
             }
             catch
             {
+                if (reportPromoted && File.Exists(reportPath))
+                {
+                    File.Delete(reportPath);
+                }
+
                 if (archivePromoted && File.Exists(archivePath))
                 {
                     File.Delete(archivePath);
@@ -1557,6 +1841,11 @@ namespace RobotArena.WebGL.Editor
                     File.Move(archiveBackupPath, archivePath);
                 }
 
+                if (reportBackupCreated && File.Exists(reportBackupPath))
+                {
+                    File.Move(reportBackupPath, reportPath);
+                }
+
                 if (outputBackupCreated && Directory.Exists(outputBackupPath))
                 {
                     Directory.Move(outputBackupPath, outputDirectory);
@@ -1565,16 +1854,31 @@ namespace RobotArena.WebGL.Editor
                 throw;
             }
 
-            TryDeletePath(outputBackupPath, directory: true);
-            TryDeletePath(archiveBackupPath, directory: false);
+            TryDeleteReleasePath(
+                outputBackupPath,
+                directory: true,
+                requiredMarker: ".backup-");
+            TryDeleteReleasePath(
+                archiveBackupPath,
+                directory: false,
+                requiredMarker: ".backup-");
+            TryDeleteReleasePath(
+                reportBackupPath,
+                directory: false,
+                requiredMarker: ".backup-");
         }
 
-        private static void DeleteCandidatePath(string path, bool directory)
+        private static void TryDeleteReleasePath(
+            string path,
+            bool directory,
+            string requiredMarker,
+            bool warnOnly = true)
         {
-            if (!path.EndsWith(".candidate", StringComparison.OrdinalIgnoreCase))
+            if (!IsAllowedReleaseCleanupPath(path, requiredMarker))
             {
                 throw new InvalidOperationException(
-                    "Refusing to delete a non-candidate path: " + path);
+                    "Refusing to delete a release path outside the allowed cleanup namespace: "
+                    + path);
             }
 
             try
@@ -1593,52 +1897,42 @@ namespace RobotArena.WebGL.Editor
             }
             catch (Exception exception)
             {
-                Debug.LogWarning("Could not remove release candidate path: " + exception.Message);
+                if (!warnOnly)
+                {
+                    throw;
+                }
+
+                Debug.LogWarning(
+                    "Could not remove release cleanup path: "
+                    + exception.Message);
             }
         }
 
-        private static void TryDeletePath(string path, bool directory)
+        private static bool IsAllowedReleaseCleanupPath(
+            string path,
+            string requiredMarker)
         {
-            try
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(requiredMarker))
             {
-                if (directory)
-                {
-                    if (Directory.Exists(path))
-                    {
-                        Directory.Delete(path, recursive: true);
-                    }
-                }
-                else if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning("Could not remove release backup path: " + exception.Message);
-            }
-        }
-
-        private static void DeleteGeneratedPath(string path, bool directory)
-        {
-            string generatedRoot = Path.GetFullPath("Build/WebGL") + Path.DirectorySeparatorChar;
-            string fullPath = Path.GetFullPath(path);
-            if (!fullPath.StartsWith(generatedRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Refusing to modify a path outside Build/WebGL: " + fullPath);
+                return false;
             }
 
-            if (directory)
+            string fileName = Path.GetFileName(path);
+            if (string.IsNullOrEmpty(fileName))
             {
-                if (Directory.Exists(fullPath))
-                {
-                    Directory.Delete(fullPath, recursive: true);
-                }
+                return false;
             }
-            else if (File.Exists(fullPath))
+
+            if (string.Equals(requiredMarker, ".candidate", StringComparison.OrdinalIgnoreCase))
             {
-                File.Delete(fullPath);
+                return fileName.EndsWith(requiredMarker, StringComparison.OrdinalIgnoreCase);
             }
+
+            int markerIndex = fileName.LastIndexOf(
+                requiredMarker,
+                StringComparison.OrdinalIgnoreCase);
+            return markerIndex >= 0 &&
+                   markerIndex + requiredMarker.Length < fileName.Length;
         }
 
         [Serializable]

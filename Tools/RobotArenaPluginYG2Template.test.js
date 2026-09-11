@@ -98,7 +98,9 @@ test('PluginYG2 template lets the canvas track the host presentation area', () =
 test('WebGL release build selects the PluginYG2 template', () => {
   assert.match(releaseBuildSource, /context\.TemplateName/);
   assert.ok(manifest.unityTemplate);
-  assert.doesNotMatch(releaseBuildSource, /PROJECT:RobotArenaPluginYG2/);
+  assert.doesNotMatch(
+    releaseBuildSource,
+    /PlayerSettings\.WebGL\.template\s*=\s*"PROJECT:RobotArenaPluginYG2"/);
   assert.doesNotMatch(releaseBuildSource, /PROJECT:RobotArenaYandex/);
 });
 
@@ -137,12 +139,14 @@ test('platform backend uses the PluginYG2 runtime adapter and public events', ()
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
   assert.match(backendSource, /WithGameReadyUnavailable/);
   assert.doesNotMatch(backendSource, /DllImport|RobotArenaPlatformProbe/);
+  assert.doesNotMatch(runtimeBridgeSource, /RobotArenaRegisterYandexLifecycleToken/);
 });
 
 test('template reports transport evidence through one explicit lifecycle channel', () => {
   assert.match(templateSource, /RobotArenaPlatformState/);
   assert.match(templateSource, /RobotArenaYandexLifecyclePause/);
-  assert.match(templateSource, /RobotArenaRegisterYandexLifecycleToken/);
+  assert.doesNotMatch(templateSource, /RobotArenaRegisterYandexLifecycleToken/);
+  assert.match(templateSource, /lifecycleToken/);
   assert.match(templateSource, /const SendPluginYG2PlatformPause/);
   assert.match(templateSource, /PluginYG2\.Transport/);
   assert.doesNotMatch(templateSource, /\[RobotArena\.Platform\] PluginYG2 platform pause=/);

@@ -178,8 +178,8 @@ namespace RobotArena.Session.Tests
                 "RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel");
             Assert.That(channelType, Is.Not.Null);
 
-            MethodInfo registerToken = channelType.GetMethod(
-                "RegisterYandexLifecycleToken",
+            MethodInfo publishState = channelType.GetMethod(
+                "PublishStateJson",
                 BindingFlags.Static | BindingFlags.NonPublic);
             MethodInfo publishPause = channelType.GetMethod(
                 "PublishYandexLifecyclePause",
@@ -187,7 +187,7 @@ namespace RobotArena.Session.Tests
             EventInfo pauseEvent = channelType.GetEvent(
                 "PlatformPauseChanged",
                 BindingFlags.Static | BindingFlags.NonPublic);
-            Assert.That(registerToken, Is.Not.Null);
+            Assert.That(publishState, Is.Not.Null);
             Assert.That(publishPause, Is.Not.Null);
             Assert.That(pauseEvent, Is.Not.Null);
 
@@ -196,7 +196,12 @@ namespace RobotArena.Session.Tests
             pauseEvent.GetAddMethod(nonPublic: true).Invoke(null, new object[] { handler });
             try
             {
-                registerToken.Invoke(null, new object[] { "controlled-token" });
+                publishState.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"initState\":\"failed\",\"lifecycleToken\":\"controlled-token\"}"
+                    });
                 LogAssert.Expect(
                     LogType.Warning,
                     new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
