@@ -11,6 +11,108 @@ using UnityEngine;
 
 namespace RobotArena.WebGL.Editor
 {
+    public sealed class RobotArenaReleaseIntegrationCoordinates
+    {
+        public RobotArenaReleaseIntegrationCoordinates(
+            string platformSdk,
+            string pluginVersion,
+            string pluginSourceArchiveSha256,
+            string pluginVendoredFingerprint,
+            string sdkLoader)
+        {
+            PlatformSdk = platformSdk ?? string.Empty;
+            PluginVersion = pluginVersion ?? string.Empty;
+            PluginSourceArchiveSha256 = pluginSourceArchiveSha256 ?? string.Empty;
+            PluginVendoredFingerprint = pluginVendoredFingerprint ?? string.Empty;
+            SdkLoader = sdkLoader ?? string.Empty;
+        }
+
+        public string PlatformSdk { get; }
+        public string PluginVersion { get; }
+        public string PluginSourceArchiveSha256 { get; }
+        public string PluginVendoredFingerprint { get; }
+        public string SdkLoader { get; }
+    }
+
+    public sealed class RobotArenaReleaseValidationResult
+    {
+        public RobotArenaReleaseValidationResult(
+            RobotArenaReleaseIntegrationCoordinates integration,
+            IEnumerable<string> errors)
+        {
+            Integration = integration;
+            Errors = new List<string>(errors ?? new string[0]);
+        }
+
+        public RobotArenaReleaseIntegrationCoordinates Integration { get; }
+        public IReadOnlyList<string> Errors { get; }
+        public bool IsValid => Integration != null && Errors.Count == 0;
+    }
+
+    public sealed class RobotArenaReleaseBuildResult
+    {
+        public RobotArenaReleaseBuildResult(string result, ulong totalSize)
+        {
+            Result = string.IsNullOrEmpty(result) ? "NotStarted" : result;
+            TotalSize = totalSize;
+        }
+
+        public string Result { get; }
+        public ulong TotalSize { get; }
+        public bool Succeeded => string.Equals(Result, "Succeeded", StringComparison.Ordinal);
+    }
+
+    public interface IRobotArenaWebGLReleaseOperations
+    {
+        void PreparePaths(string outputDirectory, string archivePath, string reportPath);
+
+        RobotArenaReleaseValidationResult ValidateConfiguration(
+            string defineSymbols,
+            string pluginVersion,
+            string templateSource);
+
+        int ApplyTexturePolicy();
+
+        RobotArenaReleaseBuildResult Build(string[] activeScenes, string outputDirectory);
+
+        RobotArenaReleaseValidationResult ValidateArtifact(string outputDirectory);
+
+        void CreateArchive(string outputDirectory, string archivePath);
+
+        RobotArenaReleaseValidationResult ValidateArchive(string archivePath);
+
+        WebGLPackageBudgetResult MeasurePackage(string archivePath, long limitBytes);
+    }
+
+    public sealed class RobotArenaWebGLReleaseBuildContext
+    {
+        public RobotArenaWebGLReleaseBuildContext(
+            string outputDirectory,
+            string archivePath,
+            string reportPath,
+            string defineSymbols,
+            string pluginVersion,
+            string templateSource,
+            IRobotArenaWebGLReleaseOperations operations)
+        {
+            OutputDirectory = Path.GetFullPath(outputDirectory);
+            ArchivePath = Path.GetFullPath(archivePath);
+            ReportPath = Path.GetFullPath(reportPath);
+            DefineSymbols = defineSymbols ?? string.Empty;
+            PluginVersion = pluginVersion ?? string.Empty;
+            TemplateSource = templateSource ?? string.Empty;
+            Operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        }
+
+        public string OutputDirectory { get; }
+        public string ArchivePath { get; }
+        public string ReportPath { get; }
+        public string DefineSymbols { get; }
+        public string PluginVersion { get; }
+        public string TemplateSource { get; }
+        public IRobotArenaWebGLReleaseOperations Operations { get; }
+    }
+
     public static class RobotArenaWebGLReleaseBuild
     {
         private const string ReleaseTemplate = "PROJECT:RobotArenaPluginYG2";
@@ -68,9 +170,19 @@ namespace RobotArena.WebGL.Editor
         [MenuItem("Robot Arena/Build WebGL release package")]
         public static void BuildReleasePackage()
         {
-            string outputDirectory = Path.GetFullPath(ReleaseOutput);
-            string archivePath = Path.GetFullPath(ReleaseArchive);
-            string reportPath = Path.GetFullPath(ReleaseReport);
+            RunReleasePackage(CreateProductionContext());
+        }
+
+        public static void RunReleasePackage(RobotArenaWebGLReleaseBuildContext context)
+        {
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+
+            string outputDirectory = context.OutputDirectory;
+            string archivePath = context.ArchivePath;
+            string reportPath = context.ReportPath;
 
             string previousTemplate = PlayerSettings.WebGL.template;
             WebGLTextureSubtarget previousSubtarget = EditorUserBuildSettings.webGLBuildSubtarget;
@@ -84,10 +196,10 @@ namespace RobotArena.WebGL.Editor
             ManagedStrippingLevel previousManagedStrippingLevel =
                 PlayerSettings.GetManagedStrippingLevel(BuildTargetGroup.WebGL);
 
-            BuildReport buildReport = null;
+            RobotArenaReleaseBuildResult buildResult = null;
             WebGLPackageBudgetResult packageResult = null;
-            PluginYG2ArtifactValidation artifactValidation = null;
-            PluginYG2ArtifactValidation archiveValidation = null;
+            RobotArenaReleaseValidationResult artifactValidation = null;
+            RobotArenaReleaseValidationResult archiveValidation = null;
             var validationErrors = new List<string>();
             string validationStage = "configuration";
             int changedTextureCount = 0;
@@ -96,12 +208,21 @@ namespace RobotArena.WebGL.Editor
             try
             {
                 validationStage = "prepare";
-                Directory.CreateDirectory(Path.GetDirectoryName(reportPath));
-                DeleteGeneratedPath(outputDirectory, true);
-                DeleteGeneratedPath(archivePath, false);
-                DeleteGeneratedPath(reportPath, false);
+                context.Operations.PreparePaths(outputDirectory, archivePath, reportPath);
+
                 validationStage = "configuration";
-                ValidatePluginYG2ReleaseConfiguration();
+                RobotArenaReleaseValidationResult configuration =
+                    context.Operations.ValidateConfiguration(
+                        context.DefineSymbols,
+                        context.PluginVersion,
+                        context.TemplateSource);
+                if (configuration == null || !configuration.IsValid)
+                {
+                    AddValidationErrors(validationErrors, configuration);
+                    throw new BuildFailedException(
+                        "PluginYG2 release configuration is invalid: "
+                        + string.Join(" | ", GetValidationErrors(configuration)));
+                }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(outputDirectory));
 
@@ -125,7 +246,7 @@ namespace RobotArena.WebGL.Editor
                     throw new BuildFailedException("The WebGL release requires at least one enabled scene.");
                 }
 
-                changedTextureCount = WebGLTextureImportPolicy.ApplyForRelease();
+                changedTextureCount = context.Operations.ApplyTexturePolicy();
                 Debug.Log(
                     "Robot Arena WebGL texture policy applied to "
                     + changedTextureCount
@@ -134,57 +255,56 @@ namespace RobotArena.WebGL.Editor
                     + ", DXT5 Crunch).");
 
                 validationStage = "build";
-                buildReport = BuildPipeline.BuildPlayer(new BuildPlayerOptions
-                {
-                    scenes = activeScenes,
-                    locationPathName = outputDirectory,
-                    target = BuildTarget.WebGL,
-                    options = BuildOptions.None
-                });
+                buildResult = context.Operations.Build(activeScenes, outputDirectory);
 
-                if (buildReport.summary.result != BuildResult.Succeeded)
+                if (buildResult == null || !buildResult.Succeeded)
                 {
                     throw new BuildFailedException(
-                        "Robot Arena WebGL release build failed: " + buildReport.summary.result);
+                        "Robot Arena WebGL release build failed: "
+                        + (buildResult == null ? "NotStarted" : buildResult.Result));
                 }
 
                 validationStage = "artifact";
-                artifactValidation = ValidatePluginYG2ReleaseArtifact(outputDirectory);
-                if (!artifactValidation.IsValid)
+                artifactValidation = context.Operations.ValidateArtifact(outputDirectory);
+                if (artifactValidation == null || !artifactValidation.IsValid)
                 {
-                    validationErrors.AddRange(artifactValidation.Errors);
+                    AddValidationErrors(validationErrors, artifactValidation);
                     throw new BuildFailedException(
                         "PluginYG2 post-processed WebGL artifact is invalid: "
-                        + string.Join(" | ", artifactValidation.Errors));
+                        + string.Join(" | ", GetValidationErrors(artifactValidation)));
                 }
 
                 validationStage = "archive";
-                ZipFile.CreateFromDirectory(
-                    outputDirectory,
-                    archivePath,
-                    System.IO.Compression.CompressionLevel.Optimal,
-                    includeBaseDirectory: false);
+                context.Operations.CreateArchive(outputDirectory, archivePath);
 
-                archiveValidation = ValidatePluginYG2ReleaseArchive(archivePath);
-                if (!archiveValidation.IsValid)
+                archiveValidation = context.Operations.ValidateArchive(archivePath);
+                if (archiveValidation == null || !archiveValidation.IsValid)
                 {
-                    validationErrors.AddRange(archiveValidation.Errors);
+                    AddValidationErrors(validationErrors, archiveValidation);
                     throw new BuildFailedException(
                         "PluginYG2 upload archive is invalid: "
-                        + string.Join(" | ", archiveValidation.Errors));
+                        + string.Join(" | ", GetValidationErrors(archiveValidation)));
                 }
 
                 validationStage = "package";
-                packageResult = WebGLPackageBudget.Measure(
+                packageResult = context.Operations.MeasurePackage(
                     archivePath,
                     WebGLPackageBudget.DefaultLimitBytes);
 
-                if (!packageResult.IsPassing)
+                if (packageResult == null || !packageResult.IsPassing)
                 {
-                    validationErrors.AddRange(packageResult.Errors);
+                    if (packageResult != null)
+                    {
+                        validationErrors.AddRange(packageResult.Errors);
+                    }
+
                     throw new BuildFailedException(
                         "Robot Arena WebGL release package failed validation: "
-                        + string.Join(" | ", packageResult.Errors));
+                        + string.Join(
+                            " | ",
+                            packageResult == null
+                                ? new[] { "Package measurement did not return a result." }
+                                : packageResult.Errors));
                 }
 
                 releaseIsUploadReady = true;
@@ -212,7 +332,8 @@ namespace RobotArena.WebGL.Editor
                 {
                     WriteReport(
                         reportPath,
-                        buildReport,
+                        outputDirectory,
+                        buildResult,
                         packageResult,
                         artifactValidation,
                         archiveValidation,
@@ -244,12 +365,28 @@ namespace RobotArena.WebGL.Editor
             }
         }
 
+        public static RobotArenaWebGLReleaseBuildContext CreateProductionContext()
+        {
+            string projectRoot = GetProjectRootPath();
+            string pluginVersionPath = Path.Combine(projectRoot, ExpectedPluginYG2VersionFile);
+            string templatePath = Path.Combine(projectRoot, ExpectedPluginYG2TemplateFile);
+            return new RobotArenaWebGLReleaseBuildContext(
+                ReleaseOutput,
+                ReleaseArchive,
+                ReleaseReport,
+                PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.WebGL),
+                File.Exists(pluginVersionPath) ? File.ReadAllText(pluginVersionPath).Trim() : string.Empty,
+                File.Exists(templatePath) ? File.ReadAllText(templatePath) : string.Empty,
+                new UnityReleaseOperations());
+        }
+
         private static void WriteReport(
             string reportPath,
-            BuildReport buildReport,
+            string outputDirectory,
+            RobotArenaReleaseBuildResult buildResult,
             WebGLPackageBudgetResult packageResult,
-            PluginYG2ArtifactValidation artifactValidation,
-            PluginYG2ArtifactValidation archiveValidation,
+            RobotArenaReleaseValidationResult artifactValidation,
+            RobotArenaReleaseValidationResult archiveValidation,
             string archivePath,
             int changedTextureCount,
             string validationStage,
@@ -281,18 +418,22 @@ namespace RobotArena.WebGL.Editor
                 }
             }
 
-            PluginYG2IntegrationManifest manifest = artifactValidation == null
-                ? archiveValidation == null ? null : archiveValidation.Manifest
-                : artifactValidation.Manifest;
-            if (manifest == null)
+            RobotArenaReleaseIntegrationCoordinates integration = artifactValidation == null
+                ? archiveValidation == null ? null : archiveValidation.Integration
+                : artifactValidation.Integration;
+            if (integration == null)
             {
                 var manifestErrors = new List<string>();
-                manifest = LoadPluginYG2Manifest(manifestErrors);
+                integration = ToIntegrationCoordinates(LoadPluginYG2Manifest(manifestErrors));
             }
 
-            string artifactPath = Path.Combine(Path.GetDirectoryName(archivePath), "RobotArenaRelease", "index.html");
-            string artifactChecksum = TryComputeFileSha256(artifactPath);
-            string archiveChecksum = TryComputeFileSha256(archivePath);
+            string artifactPath = Path.Combine(outputDirectory, "index.html");
+            string artifactChecksum = artifactValidation == null
+                ? string.Empty
+                : TryComputeFileSha256(artifactPath);
+            string archiveChecksum = archiveValidation == null
+                ? string.Empty
+                : TryComputeFileSha256(archivePath);
             string vendoredFingerprint = string.Empty;
             string vendorRoot = Path.Combine(GetProjectRootPath(), "Assets/PluginYourGames");
             if (Directory.Exists(vendorRoot))
@@ -319,8 +460,8 @@ namespace RobotArena.WebGL.Editor
 
             ReleaseBuildReport report = new ReleaseBuildReport
             {
-                buildResult = buildReport == null ? "NotStarted" : buildReport.summary.result.ToString(),
-                unityBuildBytes = buildReport == null ? 0 : buildReport.summary.totalSize,
+                buildResult = buildResult == null ? "NotStarted" : buildResult.Result,
+                unityBuildBytes = buildResult == null ? 0 : buildResult.TotalSize,
                 packageUncompressedBytes = packageResult == null ? 0 : packageResult.UncompressedBytes,
                 packageLimitBytes = packageResult == null
                     ? WebGLPackageBudget.DefaultLimitBytes
@@ -332,11 +473,15 @@ namespace RobotArena.WebGL.Editor
                 texturePolicyFormat = TextureImporterFormat.DXT5Crunched.ToString(),
                 texturePolicyCrunchQuality = WebGLTextureImportPolicy.CrunchQuality,
                 texturePolicyChangedCount = changedTextureCount,
-                platformSdk = manifest == null ? string.Empty : manifest.plugin,
-                pluginVersion = manifest == null ? string.Empty : manifest.pluginVersion,
-                pluginSourceArchiveSha256 = manifest == null ? string.Empty : manifest.sourceArchiveSha256,
-                pluginVendoredFingerprint = manifest == null ? string.Empty : manifest.vendoredFingerprint,
-                sdkLoader = manifest == null ? string.Empty : manifest.sdkLoader,
+                platformSdk = integration == null ? string.Empty : integration.PlatformSdk,
+                pluginVersion = integration == null ? string.Empty : integration.PluginVersion,
+                pluginSourceArchiveSha256 = integration == null
+                    ? string.Empty
+                    : integration.PluginSourceArchiveSha256,
+                pluginVendoredFingerprint = integration == null
+                    ? string.Empty
+                    : integration.PluginVendoredFingerprint,
+                sdkLoader = integration == null ? string.Empty : integration.SdkLoader,
                 validationStage = validationStage,
                 releaseIsUploadReady = releaseIsUploadReady,
                 validationErrors = new List<string>(validationErrors),
@@ -358,39 +503,129 @@ namespace RobotArena.WebGL.Editor
             File.WriteAllText(reportPath, JsonUtility.ToJson(report, true));
         }
 
-        private static void ValidatePluginYG2ReleaseConfiguration()
+        private static void AddValidationErrors(
+            List<string> destination,
+            RobotArenaReleaseValidationResult validation)
         {
-            var manifestErrors = new List<string>();
-            PluginYG2IntegrationManifest manifest = LoadPluginYG2Manifest(manifestErrors);
-            if (manifest == null)
+            if (validation == null || validation.Errors == null)
             {
-                throw new BuildFailedException(
-                    "PluginYG2 integration manifest is invalid: "
-                    + string.Join(" | ", manifestErrors));
+                return;
             }
 
-            string projectRoot = GetProjectRootPath();
-            string defineSymbols = PlayerSettings.GetScriptingDefineSymbolsForGroup(
-                BuildTargetGroup.WebGL);
-            string pluginVersionPath = Path.Combine(projectRoot, ExpectedPluginYG2VersionFile);
-            string templatePath = Path.Combine(projectRoot, ExpectedPluginYG2TemplateFile);
-            string pluginVersion = File.Exists(pluginVersionPath)
-                ? File.ReadAllText(pluginVersionPath).Trim()
-                : string.Empty;
-            string templateSource = File.Exists(templatePath)
-                ? File.ReadAllText(templatePath)
-                : string.Empty;
-            List<string> errors = GetPluginYG2ConfigurationErrors(
-                defineSymbols,
-                pluginVersion,
-                templateSource,
-                manifest);
-            if (errors.Count > 0)
+            destination.AddRange(validation.Errors);
+        }
+
+        private static IReadOnlyList<string> GetValidationErrors(
+            RobotArenaReleaseValidationResult validation)
+        {
+            if (validation == null || validation.Errors == null || validation.Errors.Count == 0)
             {
-                throw new BuildFailedException(
-                    "PluginYG2 release configuration is invalid: "
-                    + string.Join(" | ", errors));
+                return new[] { "Validation did not return a result." };
             }
+
+            return validation.Errors;
+        }
+
+        private static RobotArenaReleaseIntegrationCoordinates ToIntegrationCoordinates(
+            PluginYG2IntegrationManifest manifest)
+        {
+            if (manifest == null)
+            {
+                return null;
+            }
+
+            return new RobotArenaReleaseIntegrationCoordinates(
+                manifest.plugin,
+                manifest.pluginVersion,
+                manifest.sourceArchiveSha256,
+                manifest.vendoredFingerprint,
+                manifest.sdkLoader);
+        }
+
+        private sealed class UnityReleaseOperations : IRobotArenaWebGLReleaseOperations
+        {
+            public void PreparePaths(string outputDirectory, string archivePath, string reportPath)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(reportPath));
+                DeleteGeneratedPath(outputDirectory, true);
+                DeleteGeneratedPath(archivePath, false);
+                DeleteGeneratedPath(reportPath, false);
+            }
+
+            public RobotArenaReleaseValidationResult ValidateConfiguration(
+                string defineSymbols,
+                string pluginVersion,
+                string templateSource)
+            {
+                var manifestErrors = new List<string>();
+                PluginYG2IntegrationManifest manifest = LoadPluginYG2Manifest(manifestErrors);
+                List<string> errors = manifest == null
+                    ? manifestErrors
+                    : GetPluginYG2ConfigurationErrors(
+                        defineSymbols,
+                        pluginVersion,
+                        templateSource,
+                        manifest);
+                return new RobotArenaReleaseValidationResult(
+                    ToIntegrationCoordinates(manifest),
+                    errors);
+            }
+
+            public int ApplyTexturePolicy()
+            {
+                return WebGLTextureImportPolicy.ApplyForRelease();
+            }
+
+            public RobotArenaReleaseBuildResult Build(string[] activeScenes, string outputDirectory)
+            {
+                BuildReport buildReport = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = activeScenes,
+                    locationPathName = outputDirectory,
+                    target = BuildTarget.WebGL,
+                    options = BuildOptions.None
+                });
+                return new RobotArenaReleaseBuildResult(
+                    buildReport.summary.result.ToString(),
+                    buildReport.summary.totalSize);
+            }
+
+            public RobotArenaReleaseValidationResult ValidateArtifact(string outputDirectory)
+            {
+                return ToReleaseValidationResult(ValidatePluginYG2ReleaseArtifact(outputDirectory));
+            }
+
+            public void CreateArchive(string outputDirectory, string archivePath)
+            {
+                ZipFile.CreateFromDirectory(
+                    outputDirectory,
+                    archivePath,
+                    System.IO.Compression.CompressionLevel.Optimal,
+                    includeBaseDirectory: false);
+            }
+
+            public RobotArenaReleaseValidationResult ValidateArchive(string archivePath)
+            {
+                return ToReleaseValidationResult(ValidatePluginYG2ReleaseArchive(archivePath));
+            }
+
+            public WebGLPackageBudgetResult MeasurePackage(string archivePath, long limitBytes)
+            {
+                return WebGLPackageBudget.Measure(archivePath, limitBytes);
+            }
+        }
+
+        private static RobotArenaReleaseValidationResult ToReleaseValidationResult(
+            PluginYG2ArtifactValidation validation)
+        {
+            if (validation == null)
+            {
+                return null;
+            }
+
+            return new RobotArenaReleaseValidationResult(
+                ToIntegrationCoordinates(validation.Manifest),
+                validation.Errors);
         }
 
         public static List<string> GetPluginYG2ConfigurationErrors(

@@ -210,6 +210,7 @@ namespace RobotArena.WebGL.Editor.Tests
                     new object[]
                     {
                         reportPath,
+                        temporaryDirectory,
                         null,
                         null,
                         null,

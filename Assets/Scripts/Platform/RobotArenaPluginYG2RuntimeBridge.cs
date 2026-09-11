@@ -3,6 +3,25 @@ using UnityEngine;
 
 namespace RobotArena.Platform
 {
+    public interface IRobotArenaPluginYG2RuntimeSource : IDisposable
+    {
+        bool IsAvailable { get; }
+
+        bool IsSdkReady { get; }
+
+        string Environment { get; }
+
+        string Language { get; }
+
+        event Action SdkDataReady;
+
+        event Action<RobotArenaPluginYG2RuntimeState> StateChanged;
+
+        event Action<bool> PlatformPauseChanged;
+
+        void SendGameReady();
+    }
+
     [Serializable]
     public sealed class RobotArenaPluginYG2RuntimeState
     {
@@ -57,6 +76,47 @@ namespace RobotArena.Platform
             }
 
             PlatformPauseChanged?.Invoke(isPaused);
+        }
+    }
+}
+
+namespace RobotArena.Platform
+{
+    internal sealed class RobotArenaPluginYG2UnavailableRuntimeSource
+        : IRobotArenaPluginYG2RuntimeSource
+    {
+        public bool IsAvailable => false;
+
+        public bool IsSdkReady => false;
+
+        public string Environment => string.Empty;
+
+        public string Language => string.Empty;
+
+        public event Action SdkDataReady
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action<RobotArenaPluginYG2RuntimeState> StateChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action<bool> PlatformPauseChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public void SendGameReady()
+        {
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

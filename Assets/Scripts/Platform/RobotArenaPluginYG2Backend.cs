@@ -11,6 +11,7 @@ namespace RobotArena.Platform
     {
         private const float SdkInitializationTimeoutSeconds = 8f;
 
+        private readonly IRobotArenaPluginYG2RuntimeSource runtimeSource;
         private PlatformServicesSnapshot snapshot;
         private float sdkWaitStartedAt;
         private bool sdkFallbackPublished;
@@ -19,20 +20,31 @@ namespace RobotArena.Platform
         private bool disposed;
 
         public RobotArenaPluginYG2Backend()
+            : this(CreateProductionRuntimeSource(), Time.unscaledTime)
         {
-            snapshot = CreateWaitingSnapshot();
-            sdkWaitStartedAt = Time.unscaledTime;
+        }
 
-#if YandexGamesPlatform_yg
-            RobotArenaPluginYG2RuntimeChannel.StateChanged += OnRuntimeStateChanged;
-            RobotArenaPluginYG2RuntimeChannel.PlatformPauseChanged += OnPlatformPauseChanged;
-            YG.YG2.onGetSDKData += OnSdkData;
+        public RobotArenaPluginYG2Backend(IRobotArenaPluginYG2RuntimeSource runtimeSource)
+            : this(runtimeSource, Time.unscaledTime)
+        {
+        }
 
-            if (YG.YG2.isSDKEnabled)
+        public RobotArenaPluginYG2Backend(
+            IRobotArenaPluginYG2RuntimeSource runtimeSource,
+            float initialUnscaledTime)
+        {
+            this.runtimeSource = runtimeSource ?? throw new ArgumentNullException(nameof(runtimeSource));
+            snapshot = CreateInitialSnapshot(runtimeSource.IsAvailable);
+            sdkWaitStartedAt = initialUnscaledTime;
+
+            this.runtimeSource.StateChanged += OnRuntimeStateChanged;
+            this.runtimeSource.PlatformPauseChanged += OnPlatformPauseChanged;
+            this.runtimeSource.SdkDataReady += OnSdkData;
+
+            if (this.runtimeSource.IsSdkReady)
             {
                 PublishSdkReady();
             }
-#endif
         }
 
         public event Action<PlatformServicesSnapshot> SnapshotChanged;
@@ -43,8 +55,7 @@ namespace RobotArena.Platform
 
         public void MarkGameReady()
         {
-#if YandexGamesPlatform_yg
-            if (snapshot.GameReadyStatus != PlatformGameReadyStatus.NotRequested)
+            if (disposed || snapshot.GameReadyStatus != PlatformGameReadyStatus.NotRequested)
             {
                 return;
             }
@@ -60,7 +71,7 @@ namespace RobotArena.Platform
             Debug.Log("[RobotArena.Platform] PluginYG2 Game Ready requested");
             try
             {
-                YG.YG2.GameReadyAPI();
+                runtimeSource.SendGameReady();
                 PublishSnapshot(snapshot.WithGameReadyRequested());
                 ApplyGameReadyOutcome(runtimeState);
             }
@@ -71,13 +82,11 @@ namespace RobotArena.Platform
                     "[RobotArena.Platform] PluginYG2 Game Ready failed; reason="
                     + exception.Message);
             }
-#endif
         }
 
         public void Tick(float unscaledTime)
         {
-#if YandexGamesPlatform_yg
-            if (sdkFallbackPublished || snapshot.Status != PlatformServicesStatus.WaitingForSdk)
+            if (disposed || sdkFallbackPublished || snapshot.Status != PlatformServicesStatus.WaitingForSdk)
             {
                 return;
             }
@@ -87,13 +96,11 @@ namespace RobotArena.Platform
                 return;
             }
 
-            sdkFallbackPublished = true;
             PublishUnavailable(
                 PlatformServicesStatus.TimedOut,
                 "PluginYG2 SDK initialization timed out after "
                 + SdkInitializationTimeoutSeconds
                 + " seconds.");
-#endif
         }
 
         public void Dispose()
@@ -104,18 +111,30 @@ namespace RobotArena.Platform
             }
 
             disposed = true;
-#if YandexGamesPlatform_yg
-            RobotArenaPluginYG2RuntimeChannel.StateChanged -= OnRuntimeStateChanged;
-            RobotArenaPluginYG2RuntimeChannel.PlatformPauseChanged -= OnPlatformPauseChanged;
-            YG.YG2.onGetSDKData -= OnSdkData;
-#endif
+            runtimeSource.StateChanged -= OnRuntimeStateChanged;
+            runtimeSource.PlatformPauseChanged -= OnPlatformPauseChanged;
+            runtimeSource.SdkDataReady -= OnSdkData;
+            runtimeSource.Dispose();
             SnapshotChanged = null;
             PlatformPauseChanged = null;
         }
 
+        private static IRobotArenaPluginYG2RuntimeSource CreateProductionRuntimeSource()
+        {
 #if YandexGamesPlatform_yg
+            return new RobotArenaPluginYG2RuntimeSource();
+#else
+            return new RobotArenaPluginYG2UnavailableRuntimeSource();
+#endif
+        }
+
         private void OnSdkData()
         {
+            if (disposed)
+            {
+                return;
+            }
+
             if (sdkFallbackPublished)
             {
                 Debug.LogWarning(
@@ -129,12 +148,11 @@ namespace RobotArena.Platform
 
         private void OnRuntimeStateChanged(RobotArenaPluginYG2RuntimeState state)
         {
-            if (state == null)
+            if (disposed || state == null)
             {
                 return;
             }
 
-            runtimeState = state;
             string initState = (state.initState ?? string.Empty).Trim().ToLowerInvariant();
             if (sdkFallbackPublished)
             {
@@ -148,6 +166,7 @@ namespace RobotArena.Platform
                 return;
             }
 
+            runtimeState = state;
             ApplyGameReadyOutcome(state);
             switch (initState)
             {
@@ -191,7 +210,8 @@ namespace RobotArena.Platform
 
         private void OnPlatformPauseChanged(bool isPaused)
         {
-            if (snapshot.Status != PlatformServicesStatus.Ready ||
+            if (disposed ||
+                snapshot.Status != PlatformServicesStatus.Ready ||
                 (lastPlatformPauseState.HasValue && lastPlatformPauseState.Value == isPaused))
             {
                 return;
@@ -204,7 +224,7 @@ namespace RobotArena.Platform
 
         private void PublishSdkReady()
         {
-            string environment = YG.YG2.envir.appID;
+            string environment = runtimeSource.Environment;
             if (string.IsNullOrEmpty(environment))
             {
                 Debug.LogWarning(
@@ -213,7 +233,7 @@ namespace RobotArena.Platform
                 return;
             }
 
-            string language = YG.YG2.envir.language;
+            string language = runtimeSource.Language;
             PlatformCapabilityStatus loadingApiStatus = ParseCapability(
                 runtimeState == null ? null : runtimeState.loadingApi);
             PlatformCapabilityStatus playerDataStatus = ParseCapability(
@@ -262,6 +282,7 @@ namespace RobotArena.Platform
                 snapshot = snapshot.WithGameReadyUnavailable(
                     "PluginYG2 Loading API became unavailable after Game Ready was requested.");
             }
+
             SnapshotChanged?.Invoke(snapshot);
             Debug.Log(
                 "[RobotArena.Platform] PluginYG2 capability report="
@@ -271,13 +292,13 @@ namespace RobotArena.Platform
                 + "; fullscreenAds=" + fullscreenAdsStatus);
         }
 
-        private void PublishUnavailable(string reason)
-        {
-            PublishUnavailable(PlatformServicesStatus.Unavailable, reason);
-        }
-
         private void PublishUnavailable(PlatformServicesStatus status, string reason)
         {
+            if (disposed || sdkFallbackPublished)
+            {
+                return;
+            }
+
             sdkFallbackPublished = true;
             Debug.LogWarning("[RobotArena.Platform] PluginYG2 SDK unavailable; reason=" + reason);
             snapshot = new PlatformServicesSnapshot(
@@ -343,31 +364,37 @@ namespace RobotArena.Platform
 
             return PlatformCapabilityStatus.Unknown;
         }
-#endif
 
         private void PublishSnapshot(PlatformServicesSnapshot nextSnapshot)
         {
+            if (disposed)
+            {
+                return;
+            }
+
             snapshot = nextSnapshot;
             SnapshotChanged?.Invoke(snapshot);
         }
 
-        private static PlatformServicesSnapshot CreateWaitingSnapshot()
+        private static PlatformServicesSnapshot CreateInitialSnapshot(bool isAvailable)
         {
-#if YandexGamesPlatform_yg
-            return new PlatformServicesSnapshot(
-                PlatformServicesStatus.WaitingForSdk,
-                sdkDetected: false,
-                sdkInitialized: false,
-                environment: string.Empty,
-                language: string.Empty,
-                loadingApiStatus: PlatformCapabilityStatus.Unknown,
-                pauseStatus: PlatformCapabilityStatus.Unknown,
-                playerDataStatus: PlatformCapabilityStatus.Unknown,
-                leaderboardStatus: PlatformCapabilityStatus.Unknown,
-                fullscreenAdsStatus: PlatformCapabilityStatus.Unknown,
-                gameReadyStatus: PlatformGameReadyStatus.NotRequested,
-                failureReason: string.Empty);
-#else
+            if (isAvailable)
+            {
+                return new PlatformServicesSnapshot(
+                    PlatformServicesStatus.WaitingForSdk,
+                    sdkDetected: false,
+                    sdkInitialized: false,
+                    environment: string.Empty,
+                    language: string.Empty,
+                    loadingApiStatus: PlatformCapabilityStatus.Unknown,
+                    pauseStatus: PlatformCapabilityStatus.Unknown,
+                    playerDataStatus: PlatformCapabilityStatus.Unknown,
+                    leaderboardStatus: PlatformCapabilityStatus.Unknown,
+                    fullscreenAdsStatus: PlatformCapabilityStatus.Unknown,
+                    gameReadyStatus: PlatformGameReadyStatus.NotRequested,
+                    failureReason: string.Empty);
+            }
+
             return new PlatformServicesSnapshot(
                 PlatformServicesStatus.Unavailable,
                 sdkDetected: false,
@@ -381,7 +408,80 @@ namespace RobotArena.Platform
                 fullscreenAdsStatus: PlatformCapabilityStatus.Unavailable,
                 gameReadyStatus: PlatformGameReadyStatus.NotRequested,
                 failureReason: "PluginYG2 Yandex platform symbols are not enabled.");
-#endif
         }
+
+#if YandexGamesPlatform_yg
+        private sealed class RobotArenaPluginYG2RuntimeSource
+            : IRobotArenaPluginYG2RuntimeSource
+        {
+            private bool disposed;
+
+            public RobotArenaPluginYG2RuntimeSource()
+            {
+                RobotArenaPluginYG2RuntimeChannel.StateChanged += OnRuntimeStateChanged;
+                RobotArenaPluginYG2RuntimeChannel.PlatformPauseChanged += OnPlatformPauseChanged;
+                YG.YG2.onGetSDKData += OnSdkData;
+            }
+
+            public bool IsAvailable => true;
+
+            public bool IsSdkReady => YG.YG2.isSDKEnabled;
+
+            public string Environment => YG.YG2.envir.appID;
+
+            public string Language => YG.YG2.envir.language;
+
+            public event Action SdkDataReady;
+
+            public event Action<RobotArenaPluginYG2RuntimeState> StateChanged;
+
+            public event Action<bool> PlatformPauseChanged;
+
+            public void SendGameReady()
+            {
+                YG.YG2.GameReadyAPI();
+            }
+
+            public void Dispose()
+            {
+                if (disposed)
+                {
+                    return;
+                }
+
+                disposed = true;
+                RobotArenaPluginYG2RuntimeChannel.StateChanged -= OnRuntimeStateChanged;
+                RobotArenaPluginYG2RuntimeChannel.PlatformPauseChanged -= OnPlatformPauseChanged;
+                YG.YG2.onGetSDKData -= OnSdkData;
+                SdkDataReady = null;
+                StateChanged = null;
+                PlatformPauseChanged = null;
+            }
+
+            private void OnSdkData()
+            {
+                if (!disposed)
+                {
+                    SdkDataReady?.Invoke();
+                }
+            }
+
+            private void OnRuntimeStateChanged(RobotArenaPluginYG2RuntimeState state)
+            {
+                if (!disposed)
+                {
+                    StateChanged?.Invoke(state);
+                }
+            }
+
+            private void OnPlatformPauseChanged(bool isPaused)
+            {
+                if (!disposed)
+                {
+                    PlatformPauseChanged?.Invoke(isPaused);
+                }
+            }
+        }
+#endif
     }
 }

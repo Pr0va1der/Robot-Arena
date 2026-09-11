@@ -18,6 +18,14 @@ const releaseBuildPath = path.join(
   'Editor',
   'RobotArenaWebGLReleaseBuild.cs');
 const releaseBuildSource = fs.readFileSync(releaseBuildPath, 'utf8');
+const runtimeBridgePath = path.join(
+  __dirname,
+  '..',
+  'Assets',
+  'Scripts',
+  'Platform',
+  'RobotArenaPluginYG2RuntimeBridge.cs');
+const runtimeBridgeSource = fs.readFileSync(runtimeBridgePath, 'utf8');
 const backendPath = path.join(
   __dirname,
   '..',
@@ -95,18 +103,26 @@ test('WebGL release is pinned to the official PluginYG2 runtime', () => {
     assert.match(projectSettingsSource, new RegExp(`WebGL:.*\\b${define}\\b`));
   }
   assert.equal(manifest.modules.sort().join(','), 'Core,EnvirData,YandexGames');
-  assert.match(releaseBuildSource, /ValidatePluginYG2ReleaseConfiguration\(\)/);
+  assert.match(
+    releaseBuildSource,
+    /BuildReleasePackage\(\)[\s\S]*?RunReleasePackage\(CreateProductionContext\(\)\)/);
+  assert.match(releaseBuildSource, /context\.Operations\.ValidateConfiguration\s*\(/);
+  assert.match(
+    releaseBuildSource,
+    /CreateProductionContext\(\)[\s\S]*?new UnityReleaseOperations\(\)/);
   assert.match(releaseBuildSource, /ComputePluginYG2VendoredFingerprint/);
   assert.match(releaseBuildSource, /GetPluginYG2ArtifactErrors/);
 });
 
-test('platform backend uses PluginYG2 public events and APIs', () => {
+test('platform backend uses the PluginYG2 runtime adapter and public events', () => {
   assert.match(backendSource, /YG\.YG2\.onGetSDKData\s*\+=\s*OnSdkData/);
   assert.match(backendSource, /RobotArenaPluginYG2RuntimeChannel\.StateChanged\s*\+=\s*OnRuntimeStateChanged/);
   assert.match(backendSource, /RobotArenaPluginYG2RuntimeChannel\.PlatformPauseChanged\s*\+=\s*OnPlatformPauseChanged/);
   assert.doesNotMatch(backendSource, /YG\.YG2\.onPauseGame/);
   assert.match(backendSource, /YG\.YG2\.GameReadyAPI\(\)/);
   assert.match(backendSource, /YG\.YG2\.envir\.language/);
+  assert.doesNotMatch(runtimeBridgeSource, /YG\.YG2\./);
+  assert.match(backendSource, /IRobotArenaPluginYG2RuntimeSource/);
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 SDK ready/);
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 Game Ready requested/);
   assert.match(backendSource, /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
