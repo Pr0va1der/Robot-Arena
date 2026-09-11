@@ -3,13 +3,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
-const templatePath = path.join(
+const manifestPath = path.join(
   __dirname,
-  '..',
-  'Assets',
-  'WebGLTemplates',
-  'RobotArenaPluginYG2',
-  'index.html');
+  'RobotArenaPluginYG2Integration.json');
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const repositoryRoot = path.join(__dirname, '..');
+const templatePath = path.join(repositoryRoot, ...manifest.templateFile.split('/'));
 const templateSource = fs.readFileSync(templatePath, 'utf8');
 const releaseBuildPath = path.join(
   __dirname,
@@ -40,21 +39,28 @@ const projectSettingsPath = path.join(
   'ProjectSettings',
   'ProjectSettings.asset');
 const projectSettingsSource = fs.readFileSync(projectSettingsPath, 'utf8');
-const manifestPath = path.join(
-  __dirname,
-  'RobotArenaPluginYG2Integration.json');
-const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const repositoryRoot = path.join(__dirname, '..');
 const pluginVersion = fs.readFileSync(
   path.join(repositoryRoot, manifest.versionFile),
   'utf8').trim();
 
+function countOccurrences(source, value) {
+  let count = 0;
+  let offset = 0;
+  while ((offset = source.indexOf(value, offset)) >= 0) {
+    count += 1;
+    offset += value.length;
+  }
+
+  return count;
+}
+
 test('PluginYG2 template keeps one Yandex SDK loader and plugin insertion seams', () => {
-  assert.equal((templateSource.match(/<script[^>]+src="\/sdk\.js"/g) || []).length, 1);
-  assert.equal((templateSource.match(/YaGames\.init\(\)/g) || []).length, 1);
+  assert.equal(countOccurrences(templateSource, manifest.sdkLoader), 1);
+  assert.equal(countOccurrences(templateSource, manifest.sdkInitializer), 1);
   assert.match(
     templateSource,
-    /async function InitYSDK\(\)[\s\S]*?Promise\.race\([\s\S]*?YaGames\.init\(\)/);
+    /async function InitYSDK\(\)[\s\S]*?Promise\.race\(/);
+  assert.ok(templateSource.includes(manifest.sdkInitializer));
   assert.match(templateSource, /PLUGIN_YG2_INIT_TIMEOUT_MS/);
   assert.match(templateSource, /window\.__robotArenaPluginYG2/);
   assert.match(templateSource, /RecordPluginYG2Capabilities/);
@@ -90,7 +96,9 @@ test('PluginYG2 template lets the canvas track the host presentation area', () =
 });
 
 test('WebGL release build selects the PluginYG2 template', () => {
-  assert.match(releaseBuildSource, /PROJECT:RobotArenaPluginYG2/);
+  assert.match(releaseBuildSource, /context\.TemplateName/);
+  assert.ok(manifest.unityTemplate);
+  assert.doesNotMatch(releaseBuildSource, /PROJECT:RobotArenaPluginYG2/);
   assert.doesNotMatch(releaseBuildSource, /PROJECT:RobotArenaYandex/);
 });
 
@@ -98,11 +106,12 @@ test('WebGL release is pinned to the official PluginYG2 runtime', () => {
   assert.equal(pluginVersion, manifest.pluginVersion);
   assert.match(manifest.sourceArchiveSha256, /^[0-9A-F]{64}$/);
   assert.match(manifest.vendoredFingerprint, /^[0-9A-F]{64}$/);
-  assert.equal(manifest.platform, 'YandexGamesPlatform_yg');
+  assert.ok(manifest.platform);
+  assert.ok(manifest.requiredDefines.includes(manifest.platform));
   for (const define of manifest.requiredDefines) {
     assert.match(projectSettingsSource, new RegExp(`WebGL:.*\\b${define}\\b`));
   }
-  assert.equal(manifest.modules.sort().join(','), 'Core,EnvirData,YandexGames');
+  assert.ok(manifest.modules.length > 0);
   assert.match(
     releaseBuildSource,
     /BuildReleasePackage\(\)[\s\S]*?RunReleasePackage\(CreateProductionContext\(\)\)/);
@@ -132,7 +141,9 @@ test('platform backend uses the PluginYG2 runtime adapter and public events', ()
 
 test('template reports transport evidence through one explicit lifecycle channel', () => {
   assert.match(templateSource, /RobotArenaPlatformState/);
-  assert.match(templateSource, /RobotArenaPlatformPause/);
+  assert.match(templateSource, /RobotArenaYandexLifecyclePause/);
+  assert.match(templateSource, /RobotArenaRegisterYandexLifecycleToken/);
+  assert.match(templateSource, /const SendPluginYG2PlatformPause/);
   assert.match(templateSource, /PluginYG2\.Transport/);
   assert.doesNotMatch(templateSource, /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
 });

@@ -17,6 +17,7 @@ namespace RobotArena.WebGL.Editor.Tests
         private string outputDirectory;
         private string archivePath;
         private string reportPath;
+        private static readonly IntegrationManifestProbe Manifest = LoadManifest();
 
         [SetUp]
         public void SetUp()
@@ -49,12 +50,10 @@ namespace RobotArena.WebGL.Editor.Tests
 
             var operations = new ControlledReleaseOperations
             {
-                ConfigurationErrors = RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
-                    "ROBOTARENA_PLUGINYG2;PLUGIN_YG_2",
-                    "v2.0091",
-                    "<script src=\"/custom-sdk.js\"></script>")
             };
-            RobotArenaWebGLReleaseBuildContext context = CreateContext(operations);
+            RobotArenaWebGLReleaseBuildContext context = CreateContext(
+                operations,
+                validConfiguration: false);
 
             BuildFailedException failure = Assert.Throws<BuildFailedException>(
                 () => RobotArenaWebGLReleaseBuild.RunReleasePackage(context));
@@ -67,19 +66,28 @@ namespace RobotArena.WebGL.Editor.Tests
 
             ReleaseReportProbe report = ReadReport();
             Assert.That(report.validationStage, Is.EqualTo("configuration"));
+            foreach (string requiredDefine in Manifest.requiredDefines)
+            {
+                Assert.That(report.validationErrors, Does.Contain(
+                    "WebGL scripting define is missing: " + requiredDefine));
+            }
             Assert.That(report.validationErrors, Does.Contain(
-                "WebGL scripting define is missing: YandexGamesPlatform_yg"));
+                "Official "
+                + Manifest.plugin
+                + " version must be "
+                + Manifest.pluginVersion
+                + ", got "
+                + Manifest.pluginVersion
+                + "-invalid"));
+            Assert.That(report.validationErrors, Has.Some.Contains(
+                "Plugin template must contain exactly one SDK loader: " + Manifest.sdkLoader));
             Assert.That(report.validationErrors, Does.Contain(
-                "WebGL scripting define is missing: EnvirData_yg"));
-            Assert.That(report.validationErrors, Does.Contain(
-                "Official PluginYG2 version must be v2.0092, got v2.0091"));
-            Assert.That(report.validationErrors, Does.Contain(
-                "PluginYG2 template must contain exactly one /sdk.js loader."));
-            Assert.That(report.validationErrors, Does.Contain(
-                "PluginYG2 template must contain exactly one YaGames.init() call."));
-            Assert.That(report.platformSdk, Is.EqualTo("PluginYG2"));
-            Assert.That(report.pluginVersion, Is.EqualTo("v2.0092"));
-            Assert.That(report.sdkLoader, Is.EqualTo("<script src=\"/sdk.js\"></script>"));
+                "Plugin template must contain exactly one SDK initializer: "
+                + Manifest.sdkInitializer
+                + "."));
+            Assert.That(report.platformSdk, Is.EqualTo(Manifest.plugin));
+            Assert.That(report.pluginVersion, Is.EqualTo(Manifest.pluginVersion));
+            Assert.That(report.sdkLoader, Is.EqualTo(Manifest.sdkLoader));
             Assert.That(report.buildResult, Is.EqualTo("NotStarted"));
             Assert.That(report.artifactValidationCompleted, Is.False);
             Assert.That(report.artifactIsValid, Is.False);
@@ -92,23 +100,147 @@ namespace RobotArena.WebGL.Editor.Tests
         }
 
         [Test]
+        public void Failed_unity_build_writes_typed_outcome_and_never_validates_an_artifact()
+        {
+            var operations = new ControlledReleaseOperations
+            {
+                FailureStage = ControlledFailureStage.Build
+            };
+
+            BuildFailedException failure = Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(CreateContext(operations)));
+
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Message, Does.Contain("release build failed: Failed"));
+            Assert.That(operations.BuildCallCount, Is.EqualTo(1));
+
+            ReleaseReportProbe report = ReadReport();
+            Assert.That(report.validationStage, Is.EqualTo("build"));
+            Assert.That(report.buildResult, Is.EqualTo("Failed"));
+            Assert.That(report.artifactValidationCompleted, Is.False);
+            Assert.That(report.archiveValidationCompleted, Is.False);
+            Assert.That(report.releaseIsUploadReady, Is.False);
+        }
+
+        [Test]
+        public void Failed_release_preserves_the_last_successful_candidate()
+        {
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "last-successful.txt"),
+                "keep this candidate");
+            File.WriteAllText(archivePath, "last successful archive");
+
+            var operations = new ControlledReleaseOperations
+            {
+                FailureStage = ControlledFailureStage.Artifact
+            };
+
+            Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(CreateContext(operations)));
+
+            Assert.That(
+                File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
+                Is.EqualTo("keep this candidate"));
+            Assert.That(File.ReadAllText(archivePath), Is.EqualTo("last successful archive"));
+            Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
+            Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
+        }
+
+        [Test]
+        public void Successful_release_promotes_candidate_and_marks_upload_ready()
+        {
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "last-successful.txt"),
+                "replace this candidate");
+            File.WriteAllText(archivePath, "replace this archive");
+
+            RobotArenaWebGLReleaseBuild.RunReleasePackage(
+                CreateContext(new ControlledReleaseOperations()));
+
+            Assert.That(File.Exists(Path.Combine(outputDirectory, "index.html")), Is.True);
+            Assert.That(
+                File.Exists(Path.Combine(outputDirectory, "last-successful.txt")),
+                Is.False);
+            Assert.That(File.Exists(archivePath), Is.True);
+            Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
+            Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
+
+            ReleaseReportProbe report = ReadReport();
+            Assert.That(report.validationStage, Is.EqualTo("promotion"));
+            Assert.That(report.releaseIsUploadReady, Is.True);
+        }
+
+        [Test]
+        public void Promotion_failure_rolls_back_the_previous_release()
+        {
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "last-successful.txt"),
+                "keep this candidate");
+            Directory.CreateDirectory(archivePath);
+
+            Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(
+                    CreateContext(new ControlledReleaseOperations())));
+
+            Assert.That(
+                File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
+                Is.EqualTo("keep this candidate"));
+            Assert.That(Directory.Exists(archivePath), Is.True);
+            Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
+            Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
+
+            ReleaseReportProbe report = ReadReport();
+            Assert.That(report.validationStage, Is.EqualTo("promotion"));
+            Assert.That(report.releaseIsUploadReady, Is.False);
+        }
+
+        [Test]
+        public void Production_artifact_validators_scan_generated_files_beyond_root_index()
+        {
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "index.html"),
+                ControlledReleaseOperations.ValidArtifactSource);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "runtime.js"),
+                Manifest.exactlyOnceArtifactMarkers[0]);
+
+            List<string> directoryErrors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactDirectoryErrors(
+                outputDirectory);
+            Assert.That(directoryErrors, Has.Some.EqualTo(
+                "PluginYG2 artifact must contain exactly one marker: "
+                + Manifest.exactlyOnceArtifactMarkers[0]));
+
+            ZipFile.CreateFromDirectory(
+                outputDirectory,
+                archivePath,
+                System.IO.Compression.CompressionLevel.Optimal,
+                includeBaseDirectory: false);
+            List<string> archiveErrors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactArchiveErrors(
+                archivePath);
+            Assert.That(archiveErrors, Has.Some.EqualTo(
+                "PluginYG2 artifact must contain exactly one marker: "
+                + Manifest.exactlyOnceArtifactMarkers[0]));
+        }
+
+        [Test]
         public void Report_writer_failure_does_not_mask_the_original_gate_failure()
         {
             Directory.CreateDirectory(reportPath);
-            var operations = new ControlledReleaseOperations
-            {
-                ConfigurationErrors = new[] { "controlled configuration failure" }
-            };
+            var operations = new ControlledReleaseOperations();
 
             LogAssert.Expect(
                 LogType.Error,
                 new Regex("Robot Arena WebGL release report could not be written: .* is denied\\."));
             BuildFailedException failure = Assert.Throws<BuildFailedException>(
-                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(CreateContext(operations)));
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(
+                    CreateContext(operations, validConfiguration: false)));
 
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain("release configuration is invalid"));
-            Assert.That(failure.Message, Does.Contain("controlled configuration failure"));
             Assert.That(Directory.Exists(reportPath), Is.True);
         }
 
@@ -138,21 +270,21 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(report.releaseIsUploadReady, Is.False);
             Assert.That(report.validationErrors, Is.Not.Empty);
             Assert.That(report.packageIsPassing, Is.False);
-            Assert.That(report.platformSdk, Is.EqualTo("PluginYG2"));
-            Assert.That(report.pluginVersion, Is.EqualTo("v2.0092"));
+            Assert.That(report.platformSdk, Is.EqualTo(Manifest.plugin));
+            Assert.That(report.pluginVersion, Is.EqualTo(Manifest.pluginVersion));
             Assert.That(
                 report.pluginSourceArchiveSha256,
-                Is.EqualTo("8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3"));
+                Is.EqualTo(Manifest.sourceArchiveSha256));
             Assert.That(
                 report.pluginVendoredFingerprint,
-                Is.EqualTo("AB4551EFDB23E1DC417598F406AF2997F16080BBBCF8E9FB08CDFAFF9763395F"));
-            Assert.That(report.sdkLoader, Is.EqualTo("<script src=\"/sdk.js\"></script>"));
+                Is.EqualTo(Manifest.vendoredFingerprint));
+            Assert.That(report.sdkLoader, Is.EqualTo(Manifest.sdkLoader));
 
             if (failureStage == ControlledFailureStage.Artifact)
             {
                 Assert.That(report.artifactValidationCompleted, Is.True);
                 Assert.That(report.artifactIsValid, Is.False);
-                Assert.That(report.artifactErrors, Has.Some.Contains("exactly one /sdk.js loader"));
+                Assert.That(report.artifactErrors, Has.Some.Contains("exactly one SDK loader"));
                 Assert.That(report.artifactChecksumSha256, Has.Length.EqualTo(64));
                 Assert.That(report.archiveValidationCompleted, Is.False);
                 Assert.That(report.archiveChecksumSha256, Is.Empty);
@@ -180,15 +312,23 @@ namespace RobotArena.WebGL.Editor.Tests
         }
 
         private RobotArenaWebGLReleaseBuildContext CreateContext(
-            ControlledReleaseOperations operations)
+            ControlledReleaseOperations operations,
+            bool validConfiguration = true)
         {
             return new RobotArenaWebGLReleaseBuildContext(
                 outputDirectory,
                 archivePath,
                 reportPath,
-                "ROBOTARENA_PLUGINYG2;PLUGIN_YG_2",
-                "v2.0091",
-                "<script src=\"/custom-sdk.js\"></script>",
+                validConfiguration
+                    ? string.Join(";", Manifest.requiredDefines)
+                    : string.Empty,
+                validConfiguration
+                    ? Manifest.pluginVersion
+                    : Manifest.pluginVersion + "-invalid",
+                validConfiguration
+                    ? ControlledReleaseOperations.ValidArtifactSource
+                    : "<script src=\"/custom-sdk.js\"></script>",
+                Manifest.unityTemplate,
                 operations);
         }
 
@@ -200,6 +340,7 @@ namespace RobotArena.WebGL.Editor.Tests
         public enum ControlledFailureStage
         {
             None,
+            Build,
             Artifact,
             Archive,
             Package
@@ -209,14 +350,13 @@ namespace RobotArena.WebGL.Editor.Tests
         {
             private static readonly RobotArenaReleaseIntegrationCoordinates Integration =
                 new RobotArenaReleaseIntegrationCoordinates(
-                    "PluginYG2",
-                    "v2.0092",
-                    "8A5CBD1DEA0CFB0772A8E28976663CD7D91E8594B2F70DB9E03E0AC682DFADC3",
-                    "AB4551EFDB23E1DC417598F406AF2997F16080BBBCF8E9FB08CDFAFF9763395F",
-                    "<script src=\"/sdk.js\"></script>");
+                    Manifest.plugin,
+                    Manifest.pluginVersion,
+                    Manifest.sourceArchiveSha256,
+                    Manifest.vendoredFingerprint,
+                    Manifest.sdkLoader);
 
             public ControlledFailureStage FailureStage { get; set; }
-            public IReadOnlyList<string> ConfigurationErrors { get; set; } = new string[0];
             public int BuildCallCount { get; private set; }
 
             public void PreparePaths(string outputPath, string zipPath, string reportPath)
@@ -244,7 +384,12 @@ namespace RobotArena.WebGL.Editor.Tests
                 string pluginVersion,
                 string templateSource)
             {
-                return new RobotArenaReleaseValidationResult(Integration, ConfigurationErrors);
+                return new RobotArenaReleaseValidationResult(
+                    Integration,
+                    RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
+                        defineSymbols,
+                        pluginVersion,
+                        templateSource));
             }
 
             public int ApplyTexturePolicy()
@@ -260,13 +405,19 @@ namespace RobotArena.WebGL.Editor.Tests
                     FailureStage == ControlledFailureStage.Artifact
                         ? InvalidArtifactSource
                         : ValidArtifactSource);
-                return new RobotArenaReleaseBuildResult("Succeeded", 1234);
+                Directory.CreateDirectory(Path.Combine(outputPath, "Build"));
+                File.WriteAllText(Path.Combine(outputPath, "Build", "Game.data"), "package data");
+                return new RobotArenaReleaseBuildResult(
+                    FailureStage == ControlledFailureStage.Build
+                        ? RobotArenaReleaseBuildOutcome.Failed
+                        : RobotArenaReleaseBuildOutcome.Succeeded,
+                    1234);
             }
 
             public RobotArenaReleaseValidationResult ValidateArtifact(string outputPath)
             {
-                List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
-                    File.ReadAllText(Path.Combine(outputPath, "index.html")));
+                List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactDirectoryErrors(
+                    outputPath);
                 return new RobotArenaReleaseValidationResult(Integration, errors);
             }
 
@@ -293,24 +444,8 @@ namespace RobotArena.WebGL.Editor.Tests
 
             public RobotArenaReleaseValidationResult ValidateArchive(string zipPath)
             {
-                var errors = new List<string>();
-                using (ZipArchive archive = ZipFile.OpenRead(zipPath))
-                {
-                    foreach (ZipArchiveEntry entry in archive.Entries)
-                    {
-                        if (entry.FullName == "index.html")
-                        {
-                            continue;
-                        }
-
-                        using (StreamReader reader = new StreamReader(entry.Open()))
-                        {
-                            errors.AddRange(RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
-                                reader.ReadToEnd()));
-                        }
-                    }
-                }
-
+                List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactArchiveErrors(
+                    zipPath);
                 return new RobotArenaReleaseValidationResult(Integration, errors);
             }
 
@@ -321,26 +456,59 @@ namespace RobotArena.WebGL.Editor.Tests
                     FailureStage == ControlledFailureStage.Package ? 1 : limitBytes);
             }
 
-            private const string ValidArtifactSource =
-                "<script src=\"/sdk.js\"></script>\n"
-                + "YaGames.init();\n"
-                + "game_api_pause game_api_resume RequestingEnvironmentData SetEnvirData "
-                + "PluginYG2 v2.0092";
+            public static string ValidArtifactSource =>
+                Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkInitializer
+                + "\n"
+                + string.Join(" ", Manifest.requiredArtifactMarkers);
 
-            private const string InvalidArtifactSource =
-                "<script src=\"/sdk.js\"></script>\n"
-                + "<script src=\"/sdk.js\"></script>\n"
-                + "YaGames.init(); YaGames.init();\n"
-                + "game_api_pause game_api_pause game_api_resume game_api_resume "
-                + "RequestingEnvironmentData SetEnvirData PluginYG2 v2.0092\n"
-                + "RobotArenaPlatformProbe";
+            private static string InvalidArtifactSource =>
+                Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkInitializer
+                + " "
+                + Manifest.sdkInitializer
+                + "\n"
+                + string.Join(" ", Manifest.requiredArtifactMarkers)
+                + "\n"
+                + Manifest.forbiddenArtifactMarkers[0];
 
-            private const string InvalidRuntimeSource =
-                "<script src=\"/sdk.js\"></script>\n"
-                + "<script src=\"/sdk.js\"></script>\n"
-                + "YaGames.init(); YaGames.init();\n"
-                + "RequestingEnvironmentData SetEnvirData PluginYG2 v2.0092\n"
-                + "RobotArenaPlatformProbe";
+            private static string InvalidRuntimeSource =>
+                Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkInitializer
+                + " "
+                + Manifest.sdkInitializer
+                + "\n"
+                + Manifest.forbiddenArtifactMarkers[0];
+        }
+
+        private static IntegrationManifestProbe LoadManifest()
+        {
+            string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+            return JsonUtility.FromJson<IntegrationManifestProbe>(File.ReadAllText(
+                Path.Combine(projectRoot, "Tools/RobotArenaPluginYG2Integration.json")));
+        }
+
+        [Serializable]
+        private sealed class IntegrationManifestProbe
+        {
+            public string plugin;
+            public string pluginVersion;
+            public string sourceArchiveSha256;
+            public string vendoredFingerprint;
+            public string sdkLoader;
+            public string sdkInitializer;
+            public string unityTemplate;
+            public string[] requiredDefines;
+            public string[] requiredArtifactMarkers;
+            public string[] exactlyOnceArtifactMarkers;
+            public string[] forbiddenArtifactMarkers;
         }
 
         [Serializable]

@@ -277,15 +277,36 @@ test('explicit pause callbacks use the narrow platform-origin message', async ()
   harness.resolveSdk();
   await harness.settle();
 
-  vm.runInContext('PauseCallback(); ResumeCallback();', harness.context);
+  harness.sdkHandlers.get('game_api_pause')();
+  harness.sdkHandlers.get('game_api_resume')();
   await harness.settle();
 
   assert.deepEqual(
     harness.messages
-      .filter(message => message.method === 'RobotArenaPlatformPause')
-      .map(message => message.argument),
-    ['true', 'false']);
+      .filter(message => message.method === 'RobotArenaYandexLifecyclePause')
+      .map(message => JSON.parse(message.argument))
+      .map(message => ({ source: message.source, state: message.state })),
+    [
+      { source: 'yandex-lifecycle', state: 'paused' },
+      { source: 'yandex-lifecycle', state: 'resumed' },
+    ]);
   assert.doesNotMatch(harness.logs.join('\n'), /\[RobotArena\.Platform\] PluginYG2 platform pause=/);
+});
+
+test('generic PluginYG2 pause does not emit a platform-origin message', async () => {
+  const harness = createHarness({ sdkMode: 'resolve' });
+  harness.resolveSdk();
+  await harness.settle();
+
+  assert.equal(
+    vm.runInContext('typeof globalThis.SendPluginYG2PlatformPause', harness.context),
+    'undefined');
+  vm.runInContext("YG2Instance('SetPauseGame', 'true');", harness.context);
+  await harness.settle();
+
+  assert.equal(
+    harness.messages.some(message => message.method === 'RobotArenaYandexLifecyclePause'),
+    false);
 });
 
 test('platform pause received before Unity is ready is delivered after Unity startup', async () => {
@@ -293,9 +314,9 @@ test('platform pause received before Unity is ready is delivered after Unity sta
   harness.resolveSdk();
   await harness.settle();
 
-  vm.runInContext('PauseCallback();', harness.context);
+  harness.sdkHandlers.get('game_api_pause')();
   assert.equal(
-    harness.messages.some(message => message.method === 'RobotArenaPlatformPause'),
+    harness.messages.some(message => message.method === 'RobotArenaYandexLifecyclePause'),
     false);
 
   harness.resolveUnity();
@@ -303,9 +324,10 @@ test('platform pause received before Unity is ready is delivered after Unity sta
 
   assert.deepEqual(
     harness.messages
-      .filter(message => message.method === 'RobotArenaPlatformPause')
-      .map(message => message.argument),
-    ['true']);
+      .filter(message => message.method === 'RobotArenaYandexLifecyclePause')
+      .map(message => JSON.parse(message.argument))
+      .map(message => ({ source: message.source, state: message.state })),
+    [{ source: 'yandex-lifecycle', state: 'paused' }]);
 });
 
 test('Game Ready observation stays honest for void APIs and confirms only a resolved promise', async () => {

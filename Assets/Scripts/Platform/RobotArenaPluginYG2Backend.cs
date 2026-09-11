@@ -208,18 +208,20 @@ namespace RobotArena.Platform
             }
         }
 
-        private void OnPlatformPauseChanged(bool isPaused)
+        private void OnPlatformPauseChanged(RobotArenaPluginYG2PlatformPauseEvent pauseEvent)
         {
             if (disposed ||
+                pauseEvent == null ||
+                !pauseEvent.IsYandexLifecycle ||
                 snapshot.Status != PlatformServicesStatus.Ready ||
-                (lastPlatformPauseState.HasValue && lastPlatformPauseState.Value == isPaused))
+                (lastPlatformPauseState.HasValue && lastPlatformPauseState.Value == pauseEvent.IsPaused))
             {
                 return;
             }
 
-            lastPlatformPauseState = isPaused;
-            Debug.Log("[RobotArena.Platform] PluginYG2 platform pause=" + isPaused);
-            PlatformPauseChanged?.Invoke(isPaused);
+            lastPlatformPauseState = pauseEvent.IsPaused;
+            Debug.Log("[RobotArena.Platform] PluginYG2 platform pause=" + pauseEvent.IsPaused);
+            PlatformPauseChanged?.Invoke(pauseEvent.IsPaused);
         }
 
         private void PublishSdkReady()
@@ -277,6 +279,12 @@ namespace RobotArena.Platform
                 gameReadyStatus: snapshot.GameReadyStatus,
                 failureReason: string.Empty);
             if (loadingApiStatus == PlatformCapabilityStatus.Unavailable &&
+                snapshot.GameReadyStatus == PlatformGameReadyStatus.NotRequested)
+            {
+                snapshot = snapshot.WithGameReadyUnavailable(
+                    "PluginYG2 Loading API is unavailable; Game Ready was not sent.");
+            }
+            else if (loadingApiStatus == PlatformCapabilityStatus.Unavailable &&
                 snapshot.GameReadyStatus == PlatformGameReadyStatus.Requested)
             {
                 snapshot = snapshot.WithGameReadyUnavailable(
@@ -435,7 +443,7 @@ namespace RobotArena.Platform
 
             public event Action<RobotArenaPluginYG2RuntimeState> StateChanged;
 
-            public event Action<bool> PlatformPauseChanged;
+            public event Action<RobotArenaPluginYG2PlatformPauseEvent> PlatformPauseChanged;
 
             public void SendGameReady()
             {
@@ -474,11 +482,11 @@ namespace RobotArena.Platform
                 }
             }
 
-            private void OnPlatformPauseChanged(bool isPaused)
+            private void OnPlatformPauseChanged(RobotArenaPluginYG2PlatformPauseEvent pauseEvent)
             {
                 if (!disposed)
                 {
-                    PlatformPauseChanged?.Invoke(isPaused);
+                    PlatformPauseChanged?.Invoke(pauseEvent);
                 }
             }
         }

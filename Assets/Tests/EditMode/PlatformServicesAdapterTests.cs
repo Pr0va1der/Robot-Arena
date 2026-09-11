@@ -37,7 +37,7 @@ namespace RobotArena.Session.Tests
             var adapter = new PlatformServicesAdapter(backend);
 
             adapter.MarkInteractiveReady();
-            backend.PublishSnapshot(backend.Snapshot.WithSdkReady("production", "en"));
+            backend.PublishSnapshot(backend.Snapshot.WithSdkReady("production", "en", true));
             adapter.MarkInteractiveReady();
 
             Assert.That(backend.MarkGameReadyCallCount, Is.EqualTo(1));
@@ -47,7 +47,7 @@ namespace RobotArena.Session.Tests
             Assert.That(adapter.Current.GameReady, Is.False);
             Assert.That(
                 adapter.Current.LoadingApiStatus,
-                Is.EqualTo(PlatformCapabilityStatus.Unknown));
+                Is.EqualTo(PlatformCapabilityStatus.Available));
         }
 
         [Test]
@@ -90,10 +90,10 @@ namespace RobotArena.Session.Tests
             backend.PublishSnapshot(backend.Snapshot.WithSdkReady("production", "en", false));
             adapter.MarkInteractiveReady();
 
-            Assert.That(backend.MarkGameReadyCallCount, Is.EqualTo(1));
+            Assert.That(backend.MarkGameReadyCallCount, Is.Zero);
             Assert.That(
                 adapter.Current.GameReadyStatus,
-                Is.EqualTo(PlatformGameReadyStatus.Unavailable));
+                Is.EqualTo(PlatformGameReadyStatus.NotRequested));
             Assert.That(adapter.Current.GameReady, Is.False);
         }
 

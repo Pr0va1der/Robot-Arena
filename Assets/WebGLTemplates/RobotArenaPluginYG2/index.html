@@ -129,6 +129,8 @@
         let pendingPlatformPause = null;
         let unityStartRequested = false;
         const PLUGIN_YG2_INIT_TIMEOUT_MS = 8000;
+        const yandexLifecycleToken =
+            Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
         window.__robotArenaPluginYG2 = {
             initState: 'waiting',
             initStartedAt: null,
@@ -260,6 +262,10 @@
                 }).then((unityInstance) => {
                     ygGameInstance = unityInstance;
                     window.unityInstance = unityInstance;
+                    ygGameInstance.SendMessage(
+                        'YG2Instance',
+                        'RobotArenaRegisterYandexLifecycleToken',
+                        yandexLifecycleToken);
                     loadingCover.style.background = "";
                     loadingCover.style.display = "none";
                     FocusGame();
@@ -267,7 +273,7 @@
                     if (pendingPlatformPause !== null) {
                         const queuedPlatformPause = pendingPlatformPause;
                         pendingPlatformPause = null;
-                        YG2Instance('RobotArenaPlatformPause', queuedPlatformPause);
+                        YG2Instance('RobotArenaYandexLifecyclePause', queuedPlatformPause);
                     }
                     // Fill Background [Build Modify]
                 }).catch((message) => {
@@ -334,15 +340,19 @@
             }
         }
 
-        function SendPluginYG2PlatformPause(isPaused) {
-            const value = isPaused ? 'true' : 'false';
+        const SendPluginYG2PlatformPause = (isPaused) => {
+            const value = JSON.stringify({
+                source: 'yandex-lifecycle',
+                state: isPaused ? 'paused' : 'resumed',
+                token: yandexLifecycleToken
+            });
             if (ygGameInstance == null) {
                 pendingPlatformPause = value;
                 return;
             }
 
-            YG2Instance('RobotArenaPlatformPause', value);
-        }
+            YG2Instance('RobotArenaYandexLifecyclePause', value);
+        };
 
         function LogStyledMessage(message, style = 'color: #FFDF73; background-color: #454545') {
             console.log('%c' + message, style);

@@ -5,11 +5,21 @@
   "vendoredFingerprint": "AB4551EFDB23E1DC417598F406AF2997F16080BBBCF8E9FB08CDFAFF9763395F",
   "versionFile": "Assets/PluginYourGames/Version.txt",
   "templateFile": "Assets/WebGLTemplates/RobotArenaPluginYG2/index.html",
+  "unityTemplate": "PROJECT:RobotArenaPluginYG2",
+  "vendorRoot": "Assets/PluginYourGames",
   "platform": "YandexGamesPlatform_yg",
   "modules": [
     "Core",
     "YandexGames",
     "EnvirData"
+  ],
+  "requiredVendorFiles": [
+    "Scripts/Basic/YG2.cs",
+    "Scripts/Basic/GameReadyAPI.cs",
+    "Platforms/YandexGames/Scripts/YandexGamePlatform.cs",
+    "Platforms/YandexGames/Plugins/YandexGame.jslib",
+    "Modules/EnvirData/Scripts/EnvirData_yg.cs",
+    "Modules/EnvirData/Plugins/EnvirData.jslib"
   ],
   "requiredDefines": [
     "YandexGamesPlatform_yg",
@@ -25,6 +35,10 @@
     "RequestingEnvironmentData",
     "SetEnvirData",
     "PluginYG2 v2.0092"
+  ],
+  "exactlyOnceArtifactMarkers": [
+    "game_api_pause",
+    "game_api_resume"
   ],
   "forbiddenArtifactMarkers": [
     "RobotArenaPlatformProbe",

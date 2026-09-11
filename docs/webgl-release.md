@@ -1,23 +1,28 @@
 # WebGL release package
 
 Use **Robot Arena → Build WebGL release package** in the Unity Editor. The command
-cleans `Build/WebGL/RobotArenaRelease`, builds all enabled scenes with the
-`RobotArenaPluginYG2` template, creates `RobotArenaRelease-upload.zip`, and writes a
-JSON report next to it.
+builds all enabled scenes with the template declared by
+`Tools/RobotArenaPluginYG2Integration.json`, creates
+`RobotArenaRelease-upload.zip`, and writes a JSON report next to it. Build output
+is prepared in sibling `.candidate` paths; the last successful release remains
+untouched until every gate passes.
 
 The release profile is intentionally desktop-first: it uses Brotli, DXT, engine
 stripping, and WebGL managed stripping at `Low`. Before the build it applies a
 WebGL-only override to every `Texture2D` (maximum 1024 px, DXT5 Crunch at quality
 50). This override is stored in the texture `.meta` files, so reapplying the
 texture policy is idempotent; default/Standalone import settings are not
-changed. The release command still cleans its output directory and performs a
+changed. The release command cleans only the candidate output and performs a
 fresh player build each time.
 
 The gate measures the sum of uncompressed ZIP entries and fails above the
 80,000,000-byte internal budget. The archive must contain exactly one root
 `index.html` and all other files under `Build/`. The generated report records the
 package size, per-file sizes, texture profile, stripping profile, and any gate
-errors.
+errors. A release is built and validated in sibling candidate paths; the final
+release directory and upload archive are promoted only after every gate passes.
+If a build or validation fails, the previous successful candidate remains in
+place.
 
 ## Music lifecycle smoke
 
@@ -81,7 +86,7 @@ real platform iframe. Save console and network evidence showing:
   `[RobotArena.Platform] PluginYG2 platform pause=...`;
 - no `RobotArenaPlatformProbe` initialization or general-purpose custom bridge
   calls. The explicitly documented `RobotArenaPlatformState` and
-  `RobotArenaPlatformPause` messages are the single narrow project-owned
+  `RobotArenaYandexLifecyclePause` messages are the single narrow project-owned
   lifecycle transport channel; their `[RobotArena.PluginYG2.Transport]` logs are
   diagnostics, not acceptance evidence.
 

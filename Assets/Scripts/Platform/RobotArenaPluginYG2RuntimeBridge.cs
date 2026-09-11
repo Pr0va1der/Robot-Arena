@@ -17,7 +17,7 @@ namespace RobotArena.Platform
 
         event Action<RobotArenaPluginYG2RuntimeState> StateChanged;
 
-        event Action<bool> PlatformPauseChanged;
+        event Action<RobotArenaPluginYG2PlatformPauseEvent> PlatformPauseChanged;
 
         void SendGameReady();
     }
@@ -35,11 +35,41 @@ namespace RobotArena.Platform
         public string gameReadyFailureReason;
     }
 
+    public sealed class RobotArenaPluginYG2PlatformPauseEvent
+    {
+        public const string YandexLifecycleSource = "yandex-lifecycle";
+
+        public RobotArenaPluginYG2PlatformPauseEvent(string source, bool paused)
+        {
+            Source = source ?? string.Empty;
+            IsPaused = paused;
+        }
+
+        public string Source { get; }
+
+        public bool IsPaused { get; }
+
+        public bool IsYandexLifecycle => string.Equals(
+            Source,
+            YandexLifecycleSource,
+            StringComparison.Ordinal);
+    }
+
     internal static class RobotArenaPluginYG2RuntimeChannel
     {
         internal static event Action<RobotArenaPluginYG2RuntimeState> StateChanged;
 
-        internal static event Action<bool> PlatformPauseChanged;
+        internal static event Action<RobotArenaPluginYG2PlatformPauseEvent> PlatformPauseChanged;
+
+        [Serializable]
+        private sealed class PlatformPausePayload
+        {
+            public string source;
+            public string state;
+            public string token;
+        }
+
+        private static string yandexLifecycleToken;
 
         internal static void PublishStateJson(string json)
         {
@@ -65,18 +95,68 @@ namespace RobotArena.Platform
             }
         }
 
-        internal static void PublishPlatformPause(string value)
+        internal static void RegisterYandexLifecycleToken(string token)
         {
-            if (!bool.TryParse(value, out bool isPaused))
+            if (string.IsNullOrEmpty(token))
             {
                 Debug.LogWarning(
-                    "[RobotArena.PluginYG2.Transport] invalid platform pause value: "
-                    + value);
+                    "[RobotArena.PluginYG2.Transport] invalid Yandex lifecycle token: empty");
                 return;
             }
 
-            PlatformPauseChanged?.Invoke(isPaused);
+            if (!string.IsNullOrEmpty(yandexLifecycleToken) &&
+                !string.Equals(token, yandexLifecycleToken, StringComparison.Ordinal))
+            {
+                Debug.LogWarning(
+                    "[RobotArena.PluginYG2.Transport] invalid Yandex lifecycle token: already registered");
+                return;
+            }
+
+            yandexLifecycleToken = token;
         }
+
+        internal static void PublishYandexLifecyclePause(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+            {
+                Debug.LogWarning(
+                    "[RobotArena.PluginYG2.Transport] invalid platform pause payload: empty");
+                return;
+            }
+
+            try
+            {
+                PlatformPausePayload payload = JsonUtility.FromJson<PlatformPausePayload>(json);
+                string source = payload == null ? string.Empty : payload.source;
+                string state = payload == null ? string.Empty : payload.state;
+                string token = payload == null ? string.Empty : payload.token;
+                bool validSource = string.Equals(
+                    source,
+                    RobotArenaPluginYG2PlatformPauseEvent.YandexLifecycleSource,
+                    StringComparison.Ordinal);
+                bool validToken = !string.IsNullOrEmpty(yandexLifecycleToken) &&
+                                  string.Equals(token, yandexLifecycleToken, StringComparison.Ordinal);
+                bool isPaused = string.Equals(state, "paused", StringComparison.Ordinal);
+                bool isResumed = string.Equals(state, "resumed", StringComparison.Ordinal);
+                if (!validSource || !validToken || (!isPaused && !isResumed))
+                {
+                    Debug.LogWarning(
+                        "[RobotArena.PluginYG2.Transport] invalid platform pause payload: "
+                        + json);
+                    return;
+                }
+
+                PlatformPauseChanged?.Invoke(
+                    new RobotArenaPluginYG2PlatformPauseEvent(source, isPaused));
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    "[RobotArena.PluginYG2.Transport] invalid platform pause payload: "
+                    + exception.Message);
+            }
+        }
+
     }
 }
 
@@ -105,7 +185,7 @@ namespace RobotArena.Platform
             remove { }
         }
 
-        public event Action<bool> PlatformPauseChanged
+        public event Action<RobotArenaPluginYG2PlatformPauseEvent> PlatformPauseChanged
         {
             add { }
             remove { }
@@ -131,9 +211,14 @@ namespace YG.Insides
             RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel.PublishStateJson(json);
         }
 
-        public void RobotArenaPlatformPause(string value)
+        public void RobotArenaRegisterYandexLifecycleToken(string token)
         {
-            RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel.PublishPlatformPause(value);
+            RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel.RegisterYandexLifecycleToken(token);
+        }
+
+        public void RobotArenaYandexLifecyclePause(string json)
+        {
+            RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel.PublishYandexLifecyclePause(json);
         }
     }
 }

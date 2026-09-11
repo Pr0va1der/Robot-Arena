@@ -357,7 +357,9 @@ namespace RobotArena.Platform
             if (!interactiveReady ||
                 gameReadyRequested ||
                 snapshot == null ||
+                snapshot.Status != PlatformServicesStatus.Ready ||
                 !snapshot.SdkInitialized ||
+                snapshot.LoadingApiStatus != PlatformCapabilityStatus.Available ||
                 snapshot.GameReadyStatus != PlatformGameReadyStatus.NotRequested)
             {
                 return;

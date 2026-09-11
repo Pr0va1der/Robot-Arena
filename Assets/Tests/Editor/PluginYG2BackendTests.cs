@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using RobotArena.Platform;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace RobotArena.Session.Tests
 {
@@ -65,7 +69,7 @@ namespace RobotArena.Session.Tests
             backend.Tick(8.1f);
             source.PublishState(CreateReadyState());
             source.PublishSdkData();
-            source.PublishPause(true);
+            source.PublishPause(CreatePlatformPause(true));
 
             Assert.That(backend.Snapshot.Status, Is.EqualTo(PlatformServicesStatus.TimedOut));
             Assert.That(pauseStates, Is.Empty);
@@ -110,11 +114,11 @@ namespace RobotArena.Session.Tests
             backend.PlatformPauseChanged += pauseStates.Add;
             source.PublishState(CreateReadyState());
 
-            source.PublishPause(true);
-            source.PublishPause(true);
-            source.PublishPause(false);
+            source.PublishPause(CreatePlatformPause(true));
+            source.PublishPause(CreatePlatformPause(true));
+            source.PublishPause(CreatePlatformPause(false));
             backend.Dispose();
-            source.PublishPause(true);
+            source.PublishPause(CreatePlatformPause(true));
             source.PublishState(CreateReadyState());
             source.PublishSdkData();
 
@@ -151,13 +155,100 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
+        public void Ignores_non_yandex_pause_origin()
+        {
+            var source = new ControlledRuntimeSource();
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var pauseStates = new List<bool>();
+            backend.PlatformPauseChanged += pauseStates.Add;
+            source.PublishState(CreateReadyState());
+
+            source.PublishPause(
+                new RobotArenaPluginYG2PlatformPauseEvent("plugin-internal", true));
+
+            Assert.That(pauseStates, Is.Empty);
+
+            backend.Dispose();
+        }
+
+        [Test]
+        public void Runtime_pause_channel_requires_registered_yandex_origin_token()
+        {
+            Type channelType = typeof(RobotArenaPluginYG2PlatformPauseEvent).Assembly.GetType(
+                "RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel");
+            Assert.That(channelType, Is.Not.Null);
+
+            MethodInfo registerToken = channelType.GetMethod(
+                "RegisterYandexLifecycleToken",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo publishPause = channelType.GetMethod(
+                "PublishYandexLifecyclePause",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            EventInfo pauseEvent = channelType.GetEvent(
+                "PlatformPauseChanged",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(registerToken, Is.Not.Null);
+            Assert.That(publishPause, Is.Not.Null);
+            Assert.That(pauseEvent, Is.Not.Null);
+
+            var received = new List<RobotArenaPluginYG2PlatformPauseEvent>();
+            Action<RobotArenaPluginYG2PlatformPauseEvent> handler = received.Add;
+            pauseEvent.GetAddMethod(nonPublic: true).Invoke(null, new object[] { handler });
+            try
+            {
+                registerToken.Invoke(null, new object[] { "controlled-token" });
+                LogAssert.Expect(
+                    LogType.Warning,
+                    new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
+                publishPause.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"source\":\"yandex-lifecycle\",\"state\":\"paused\","
+                        + "\"token\":\"wrong-token\"}"
+                    });
+                LogAssert.Expect(
+                    LogType.Warning,
+                    new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
+                publishPause.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"source\":\"plugin-internal\",\"state\":\"paused\","
+                        + "\"token\":\"controlled-token\"}"
+                    });
+                LogAssert.Expect(
+                    LogType.Warning,
+                    new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
+                publishPause.Invoke(null, new object[] { "malformed" });
+
+                Assert.That(received, Is.Empty);
+
+                publishPause.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"source\":\"yandex-lifecycle\",\"state\":\"paused\","
+                        + "\"token\":\"controlled-token\"}"
+                    });
+
+                Assert.That(received, Has.Count.EqualTo(1));
+                Assert.That(received[0].IsYandexLifecycle, Is.True);
+                Assert.That(received[0].IsPaused, Is.True);
+            }
+            finally
+            {
+                pauseEvent.GetRemoveMethod(nonPublic: true).Invoke(null, new object[] { handler });
+            }
+        }
+
+        [Test]
         public void Sends_game_ready_through_the_adapter_and_consumes_backend_outcome()
         {
             var source = new ControlledRuntimeSource();
             var backend = new RobotArenaPluginYG2Backend(source, 0f);
             var adapter = new PlatformServicesAdapter(backend);
             adapter.MarkInteractiveReady();
-            backend.MarkGameReady();
 
             source.PublishState(new RobotArenaPluginYG2RuntimeState
             {
@@ -176,6 +267,149 @@ namespace RobotArena.Session.Tests
             backend.Dispose();
         }
 
+        [Test]
+        public void Sends_game_ready_when_sdk_is_ready_before_interactive_menu()
+        {
+            var source = new ControlledRuntimeSource();
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var adapter = new PlatformServicesAdapter(backend);
+
+            source.PublishState(CreateReadyState());
+            Assert.That(source.GameReadyCallCount, Is.Zero);
+
+            adapter.MarkInteractiveReady();
+
+            Assert.That(source.GameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Requested));
+
+            adapter.Dispose();
+            backend.Dispose();
+        }
+
+        [Test]
+        public void Sends_game_ready_when_interactive_menu_is_ready_before_sdk()
+        {
+            var source = new ControlledRuntimeSource();
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var adapter = new PlatformServicesAdapter(backend);
+
+            adapter.MarkInteractiveReady();
+            Assert.That(source.GameReadyCallCount, Is.Zero);
+
+            source.PublishState(CreateReadyState());
+
+            Assert.That(source.GameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Requested));
+
+            adapter.Dispose();
+            backend.Dispose();
+        }
+
+        [Test]
+        public void Does_not_send_game_ready_when_loading_api_is_unavailable()
+        {
+            var source = new ControlledRuntimeSource();
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var adapter = new PlatformServicesAdapter(backend);
+            adapter.MarkInteractiveReady();
+
+            source.PublishState(new RobotArenaPluginYG2RuntimeState
+            {
+                initState = "ready",
+                loadingApi = "unavailable"
+            });
+
+            Assert.That(source.GameReadyCallCount, Is.Zero);
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Unavailable));
+
+            adapter.Dispose();
+            backend.Dispose();
+        }
+
+        [Test]
+        public void Converts_synchronous_game_ready_failure_to_failed_status()
+        {
+            var source = new ControlledRuntimeSource
+            {
+                ThrowOnGameReady = true
+            };
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var adapter = new PlatformServicesAdapter(backend);
+            adapter.MarkInteractiveReady();
+
+            LogAssert.Expect(
+                LogType.Error,
+                "[RobotArena.Platform] PluginYG2 Game Ready failed; reason=controlled Game Ready failure");
+            source.PublishState(CreateReadyState());
+
+            Assert.That(source.GameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Failed));
+            Assert.That(adapter.Current.FailureReason, Does.Contain("controlled Game Ready failure"));
+
+            adapter.Dispose();
+            backend.Dispose();
+        }
+
+        [Test]
+        public void Converts_rejected_game_ready_outcome_to_failed_status_through_adapter()
+        {
+            var source = new ControlledRuntimeSource();
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var adapter = new PlatformServicesAdapter(backend);
+            adapter.MarkInteractiveReady();
+
+            LogAssert.Expect(
+                LogType.Error,
+                "[RobotArena.Platform] PluginYG2 Game Ready failed; reason=controlled Game Ready rejection");
+            source.PublishState(new RobotArenaPluginYG2RuntimeState
+            {
+                initState = "ready",
+                loadingApi = "available",
+                gameReadyOutcome = "failed",
+                gameReadyFailureReason = "controlled Game Ready rejection"
+            });
+
+            Assert.That(source.GameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Failed));
+            Assert.That(
+                adapter.Current.FailureReason,
+                Is.EqualTo("controlled Game Ready rejection"));
+
+            adapter.Dispose();
+            backend.Dispose();
+        }
+
+        [Test]
+        public void Keeps_void_game_ready_outcome_requested_and_does_not_retry()
+        {
+            var source = new ControlledRuntimeSource();
+            var backend = new RobotArenaPluginYG2Backend(source, 0f);
+            var adapter = new PlatformServicesAdapter(backend);
+            adapter.MarkInteractiveReady();
+
+            source.PublishState(CreateReadyState());
+            adapter.MarkInteractiveReady();
+            source.PublishState(CreateReadyState());
+
+            Assert.That(source.GameReadyCallCount, Is.EqualTo(1));
+            Assert.That(
+                adapter.Current.GameReadyStatus,
+                Is.EqualTo(PlatformGameReadyStatus.Requested));
+
+            adapter.Dispose();
+            backend.Dispose();
+        }
+
         private static RobotArenaPluginYG2RuntimeState CreateReadyState()
         {
             return new RobotArenaPluginYG2RuntimeState
@@ -188,11 +422,18 @@ namespace RobotArena.Session.Tests
             };
         }
 
+        private static RobotArenaPluginYG2PlatformPauseEvent CreatePlatformPause(bool paused)
+        {
+            return new RobotArenaPluginYG2PlatformPauseEvent(
+                RobotArenaPluginYG2PlatformPauseEvent.YandexLifecycleSource,
+                paused);
+        }
+
         private sealed class ControlledRuntimeSource : IRobotArenaPluginYG2RuntimeSource
         {
             public event Action SdkDataReady;
             public event Action<RobotArenaPluginYG2RuntimeState> StateChanged;
-            public event Action<bool> PlatformPauseChanged;
+            public event Action<RobotArenaPluginYG2PlatformPauseEvent> PlatformPauseChanged;
 
             public bool IsAvailable => true;
             public bool IsSdkReady => false;
@@ -200,6 +441,7 @@ namespace RobotArena.Session.Tests
             public string Language { get; set; } = "en";
             public int GameReadyCallCount { get; private set; }
             public int DisposeCallCount { get; private set; }
+            public bool ThrowOnGameReady { get; set; }
 
             public void PublishSdkData()
             {
@@ -211,14 +453,18 @@ namespace RobotArena.Session.Tests
                 StateChanged?.Invoke(state);
             }
 
-            public void PublishPause(bool isPaused)
+            public void PublishPause(RobotArenaPluginYG2PlatformPauseEvent pauseEvent)
             {
-                PlatformPauseChanged?.Invoke(isPaused);
+                PlatformPauseChanged?.Invoke(pauseEvent);
             }
 
             public void SendGameReady()
             {
                 GameReadyCallCount++;
+                if (ThrowOnGameReady)
+                {
+                    throw new InvalidOperationException("controlled Game Ready failure");
+                }
             }
 
             public void Dispose()

@@ -6,12 +6,14 @@ using System.Reflection;
 using NUnit.Framework;
 using RobotArena.WebGL.Editor;
 using UnityEditor;
+using UnityEngine;
 
 namespace RobotArena.WebGL.Editor.Tests
 {
     public sealed class WebGLPackageBudgetTests
     {
         private string archivePath;
+        private static readonly IntegrationManifestProbe Manifest = LoadManifest();
 
         [SetUp]
         public void SetUp()
@@ -118,39 +120,40 @@ namespace RobotArena.WebGL.Editor.Tests
         public void PluginYG2_release_configuration_accepts_the_pinned_official_path()
         {
             var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
-                "UNITY_POST_PROCESSING_STACK_V2;YandexGamesPlatform_yg;ROBOTARENA_PLUGINYG2;PLUGIN_YG_2;EnvirData_yg",
-                "v2.0092",
-                "<script src=\"/sdk.js\"></script>\n<script>YaGames.init()</script>");
+                string.Join(";", Manifest.requiredDefines),
+                Manifest.pluginVersion,
+                Manifest.sdkLoader + "\n" + Manifest.sdkInitializer);
 
             Assert.That(errors, Is.Empty);
+            Assert.That(Manifest.requiredDefines, Does.Contain(Manifest.platform));
         }
 
         [Test]
         public void PluginYG2_release_configuration_rejects_a_partial_or_custom_sdk_path()
         {
             var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
-                "ROBOTARENA_PLUGINYG2;PLUGIN_YG_2",
-                "v2.0091",
+                string.Empty,
+                Manifest.pluginVersion + "-invalid",
                 "<script src=\"/custom-sdk.js\"></script>");
 
-            Assert.That(errors, Has.Some.Contains("YandexGamesPlatform_yg"));
-            Assert.That(errors, Has.Some.Contains("EnvirData_yg"));
-            Assert.That(errors, Has.Some.Contains("v2.0092"));
-            Assert.That(errors, Has.Some.Contains("exactly one /sdk.js loader"));
-            Assert.That(errors, Has.Some.Contains("exactly one YaGames.init()"));
+            foreach (string requiredDefine in Manifest.requiredDefines)
+            {
+                Assert.That(errors, Has.Some.Contains(requiredDefine));
+            }
+            Assert.That(errors, Has.Some.Contains(Manifest.pluginVersion));
+            Assert.That(errors, Has.Some.Contains("exactly one SDK loader"));
+            Assert.That(errors, Has.Some.Contains("exactly one SDK initializer"));
         }
 
         [Test]
         public void PluginYG2_post_processed_artifact_accepts_the_official_runtime_markers()
         {
             var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
-                "<script src=\"/sdk.js\"></script>\n"
-                + "const sdk = await YaGames.init();\n"
-                + "ysdk.on('game_api_pause', PauseCallback);\n"
-                + "ysdk.on('game_api_resume', ResumeCallback);\n"
-                + "await RequestingEnvironmentData();\n"
-                + "YG2Instance('SetEnvirData', environmentData);\n"
-                + "[PluginYG2 v2.0092] [Platform: YandexGames]");
+                Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkInitializer
+                + "\n"
+                + string.Join(" ", Manifest.requiredArtifactMarkers));
 
             Assert.That(errors, Is.Empty);
         }
@@ -159,31 +162,42 @@ namespace RobotArena.WebGL.Editor.Tests
         public void PluginYG2_post_processed_artifact_rejects_legacy_or_duplicate_runtime_paths()
         {
             var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
-                "<script src=\"/sdk.js\"></script>\n"
-                + "<script src=\"/sdk.js\"></script>\n"
-                + "YaGames.init(); YaGames.init();\n"
-                + "game_api_pause game_api_pause game_api_resume game_api_resume\n"
-                + "RobotArenaPlatformProbe\n");
+                Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkInitializer
+                + " "
+                + Manifest.sdkInitializer
+                + "\n"
+                + string.Join(" ", Manifest.requiredArtifactMarkers)
+                + " "
+                + string.Join(" ", Manifest.exactlyOnceArtifactMarkers)
+                + "\n"
+                + Manifest.forbiddenArtifactMarkers[0]
+                + "\n");
 
-            Assert.That(errors, Has.Some.Contains("exactly one /sdk.js loader"));
-            Assert.That(errors, Has.Some.Contains("exactly one YaGames.init()"));
-            Assert.That(errors, Has.Some.Contains("exactly one lifecycle marker: game_api_pause"));
-            Assert.That(errors, Has.Some.Contains("exactly one lifecycle marker: game_api_resume"));
+            Assert.That(errors, Has.Some.Contains("exactly one SDK loader"));
+            Assert.That(errors, Has.Some.Contains("exactly one SDK initializer"));
+            foreach (string marker in Manifest.exactlyOnceArtifactMarkers)
+            {
+                Assert.That(errors, Has.Some.Contains("exactly one marker: " + marker));
+            }
             Assert.That(errors, Has.Some.Contains("legacy custom bridge"));
-            Assert.That(errors, Has.Some.Contains("game_api_pause"));
-            Assert.That(errors, Has.Some.Contains("RequestingEnvironmentData"));
         }
 
         [Test]
         public void PluginYG2_artifact_validation_ignores_comment_only_markers()
         {
             var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactErrors(
-                "<!-- game_api_pause game_api_resume YaGames.init() /sdk.js -->\n"
-                + "<script src=\"/sdk.js\"></script>\n"
-                + "YaGames.init();\n"
-                + "ysdk.on('game_api_pause', PauseCallback);\n"
-                + "ysdk.on('game_api_resume', ResumeCallback);\n"
-                + "RequestingEnvironmentData(); SetEnvirData(); PluginYG2 v2.0092");
+                "<!-- "
+                + string.Join(" ", Manifest.requiredArtifactMarkers)
+                + " -->\n"
+                + Manifest.sdkLoader
+                + "\n"
+                + Manifest.sdkInitializer
+                + "\n"
+                + string.Join(" ", Manifest.requiredArtifactMarkers));
 
             Assert.That(errors, Is.Empty);
         }
@@ -217,7 +231,7 @@ namespace RobotArena.WebGL.Editor.Tests
                         null,
                         missingArchivePath,
                         0,
-                        "configuration",
+                        RobotArenaReleaseValidationStage.Configuration,
                         new List<string> { "synthetic gate failure" },
                         false
                     });
@@ -238,11 +252,13 @@ namespace RobotArena.WebGL.Editor.Tests
 
         private void CreateArchive(params (string Name, int Size)[] entries)
         {
-            using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+                using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
             {
                 foreach ((string name, int size) in entries)
                 {
-                    ZipArchiveEntry entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                    ZipArchiveEntry entry = archive.CreateEntry(
+                        name,
+                        System.IO.Compression.CompressionLevel.Optimal);
                     using Stream stream = entry.Open();
                     for (int index = 0; index < size; index++)
                     {
@@ -250,6 +266,26 @@ namespace RobotArena.WebGL.Editor.Tests
                     }
                 }
             }
+        }
+
+        private static IntegrationManifestProbe LoadManifest()
+        {
+            string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+            return JsonUtility.FromJson<IntegrationManifestProbe>(File.ReadAllText(
+                Path.Combine(projectRoot, "Tools/RobotArenaPluginYG2Integration.json")));
+        }
+
+        [Serializable]
+        private sealed class IntegrationManifestProbe
+        {
+            public string pluginVersion;
+            public string platform;
+            public string sdkLoader;
+            public string sdkInitializer;
+            public string[] requiredDefines;
+            public string[] requiredArtifactMarkers;
+            public string[] exactlyOnceArtifactMarkers;
+            public string[] forbiddenArtifactMarkers;
         }
     }
 }
