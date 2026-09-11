@@ -47,12 +47,12 @@ namespace RobotArena.Session.Tests
             backend.SnapshotChanged += snapshots.Add;
 
             source.PublishSdkData();
-            source.PublishState(new RobotArenaPluginYG2RuntimeState
-            {
-                initState = "ready"
-            });
+            source.PublishState(CreateReadyState());
 
             Assert.That(backend.Snapshot.Status, Is.EqualTo(PlatformServicesStatus.Ready));
+            Assert.That(
+                backend.Snapshot.LoadingApiStatus,
+                Is.EqualTo(PlatformCapabilityStatus.Available));
             Assert.That(snapshots, Has.Count.EqualTo(1));
 
             backend.Dispose();

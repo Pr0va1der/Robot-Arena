@@ -287,6 +287,7 @@ namespace RobotArena.WebGL.Editor.Tests
                         null,
                         null,
                         missingArchivePath,
+                        Manifest.pluginVersion,
                         0,
                         RobotArenaReleaseValidationStage.Configuration,
                         new List<string> { "synthetic gate failure" },

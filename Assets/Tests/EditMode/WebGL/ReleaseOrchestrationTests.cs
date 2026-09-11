@@ -90,7 +90,9 @@ namespace RobotArena.WebGL.Editor.Tests
                 + Manifest.sdkInitializer
                 + "."));
             Assert.That(report.platformSdk, Is.EqualTo(Manifest.plugin));
-            Assert.That(report.pluginVersion, Is.EqualTo(Manifest.pluginVersion));
+            Assert.That(
+                report.pluginVersion,
+                Is.EqualTo(Manifest.pluginVersion + "-invalid"));
             Assert.That(report.sdkLoader, Is.EqualTo(Manifest.sdkLoader));
             Assert.That(report.buildResult, Is.EqualTo("NotStarted"));
             Assert.That(report.artifactValidationCompleted, Is.False);

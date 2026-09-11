@@ -226,6 +226,15 @@ namespace RobotArena.Platform
 
         private void PublishSdkReady()
         {
+            if (runtimeState == null ||
+                !string.Equals(
+                    (runtimeState.initState ?? string.Empty).Trim(),
+                    "ready",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             string environment = runtimeSource.Environment;
             if (string.IsNullOrEmpty(environment))
             {

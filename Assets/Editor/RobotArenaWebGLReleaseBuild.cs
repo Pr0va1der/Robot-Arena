@@ -369,6 +369,7 @@ namespace RobotArena.WebGL.Editor
                     artifactValidation,
                     archiveValidation,
                     candidateArchivePath,
+                    context.PluginVersion,
                     changedTextureCount,
                     validationStage,
                     validationErrors,
@@ -419,6 +420,7 @@ namespace RobotArena.WebGL.Editor
                             artifactValidation,
                             archiveValidation,
                             candidateArchivePath,
+                            context.PluginVersion,
                             changedTextureCount,
                             validationStage,
                             validationErrors,
@@ -485,6 +487,7 @@ namespace RobotArena.WebGL.Editor
             RobotArenaReleaseValidationResult artifactValidation,
             RobotArenaReleaseValidationResult archiveValidation,
             string archivePath,
+            string attemptedPluginVersion,
             int changedTextureCount,
             RobotArenaReleaseValidationStage validationStage,
             List<string> validationErrors,
@@ -523,6 +526,7 @@ namespace RobotArena.WebGL.Editor
                 var manifestErrors = new List<string>();
                 integration = ToIntegrationCoordinates(LoadPluginYG2Manifest(manifestErrors));
             }
+            integration = WithAttemptedPluginVersion(integration, attemptedPluginVersion);
 
             string artifactPath = Path.Combine(outputDirectory, "index.html");
             string artifactChecksum = artifactValidation == null
@@ -649,6 +653,23 @@ namespace RobotArena.WebGL.Editor
                 manifest.sourceArchiveSha256,
                 manifest.vendoredFingerprint,
                 manifest.sdkLoader);
+        }
+
+        private static RobotArenaReleaseIntegrationCoordinates WithAttemptedPluginVersion(
+            RobotArenaReleaseIntegrationCoordinates integration,
+            string attemptedPluginVersion)
+        {
+            if (integration == null)
+            {
+                return null;
+            }
+
+            return new RobotArenaReleaseIntegrationCoordinates(
+                integration.PlatformSdk,
+                attemptedPluginVersion,
+                integration.PluginSourceArchiveSha256,
+                integration.PluginVendoredFingerprint,
+                integration.SdkLoader);
         }
 
         private sealed class UnityReleaseOperations : IRobotArenaWebGLReleaseOperations
