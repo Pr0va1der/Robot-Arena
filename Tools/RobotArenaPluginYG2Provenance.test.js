@@ -182,6 +182,36 @@ test('provenance validation rejects every fixed policy coordinate drift', () => 
   }
 });
 
+test('provenance validation rejects unexpected values in every fixed set', () => {
+  const unexpectedSetVariants = {
+    modules: [...manifest.modules, 'UnexpectedModule'],
+    requiredVendorFiles: [...manifest.requiredVendorFiles, 'Unexpected/Required.cs'],
+    requiredDefines: [...manifest.requiredDefines, 'UNEXPECTED_DEFINE'],
+    requiredArtifactMarkers: [...manifest.requiredArtifactMarkers, 'unexpected-marker'],
+    exactlyOnceArtifactMarkers: [...manifest.exactlyOnceArtifactMarkers, 'unexpected-marker'],
+    forbiddenArtifactMarkers: [...manifest.forbiddenArtifactMarkers, 'unexpected-marker'],
+  };
+  const policyErrorFragments = {
+    modules: 'exactly Core',
+    requiredVendorFiles: 'integration policy',
+    requiredDefines: 'integration policy',
+    requiredArtifactMarkers: 'integration policy',
+    exactlyOnceArtifactMarkers: 'exactly-once artifact markers',
+    forbiddenArtifactMarkers: 'integration policy',
+  };
+
+  for (const [fieldName, value] of Object.entries(unexpectedSetVariants)) {
+    const errors = provenance.validateProvenance({
+      manifest: { ...manifest, [fieldName]: value },
+      vendorRoot,
+      requireArchive: false,
+    });
+    assert.ok(
+      errors.some(error => error.includes(policyErrorFragments[fieldName])),
+      'unexpected value in ' + fieldName + ' was not rejected by the fixed policy');
+  }
+});
+
 test('vendored fingerprint changes when an imported file changes', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'robot-arena-provenance-'));
   try {

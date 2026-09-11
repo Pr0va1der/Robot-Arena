@@ -226,6 +226,15 @@ namespace RobotArena.Session.Tests
                     LogType.Warning,
                     new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
                 publishPause.Invoke(null, new object[] { "malformed" });
+                LogAssert.Expect(
+                    LogType.Warning,
+                    new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
+                publishPause.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"source\":\"yandex-lifecycle\",\"state\":\"paused\"}"
+                    });
 
                 Assert.That(received, Is.Empty);
 

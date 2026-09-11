@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using RobotArena.WebGL.Editor;
@@ -419,11 +420,18 @@ namespace RobotArena.WebGL.Editor.Tests
 
         private void AssertStableReleaseSet()
         {
+            AssertFileBytes(
+                Path.Combine(outputDirectory, "last-successful.txt"),
+                "last successful output");
+            AssertFileBytes(archivePath, "last successful archive");
+            AssertFileBytes(reportPath, "last successful report");
+        }
+
+        private static void AssertFileBytes(string filePath, string expectedContents)
+        {
             Assert.That(
-                File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
-                Is.EqualTo("last successful output"));
-            Assert.That(File.ReadAllText(archivePath), Is.EqualTo("last successful archive"));
-            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("last successful report"));
+                File.ReadAllBytes(filePath),
+                Is.EqualTo(Encoding.UTF8.GetBytes(expectedContents)));
         }
 
         private static string ComputeSha256(string filePath)
