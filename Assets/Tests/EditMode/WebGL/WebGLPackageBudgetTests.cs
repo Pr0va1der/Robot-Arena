@@ -129,6 +129,63 @@ namespace RobotArena.WebGL.Editor.Tests
         }
 
         [Test]
+        public void PluginYG2_manifest_policy_accepts_the_committed_receipt()
+        {
+            List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ManifestPolicyErrors(
+                ReadCommittedManifestJson());
+
+            Assert.That(errors, Is.Empty);
+        }
+
+        [TestCaseSource(nameof(PluginYG2ManifestScalarMutations))]
+        public void PluginYG2_manifest_policy_rejects_fixed_scalar_mutations(
+            string fieldName,
+            string mutatedValue)
+        {
+            IntegrationManifestProbe manifest = LoadManifest();
+            SetManifestScalar(manifest, fieldName, mutatedValue);
+
+            List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ManifestPolicyErrors(
+                JsonUtility.ToJson(manifest));
+
+            Assert.That(errors, Has.Some.Contains("Manifest " + fieldName));
+        }
+
+        [TestCaseSource(nameof(PluginYG2ManifestExactSetMutations))]
+        public void PluginYG2_manifest_policy_rejects_missing_or_unexpected_set_entries(
+            string fieldName,
+            bool removeRequiredEntry)
+        {
+            IntegrationManifestProbe manifest = LoadManifest();
+            string[] values = GetManifestList(manifest, fieldName);
+            Assert.That(values, Is.Not.Null.And.Not.Empty);
+
+            SetManifestList(
+                manifest,
+                fieldName,
+                removeRequiredEntry
+                    ? RemoveFirst(values)
+                    : Append(values, fieldName + "-unexpected"));
+
+            List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ManifestPolicyErrors(
+                JsonUtility.ToJson(manifest));
+
+            Assert.That(errors, Has.Some.Contains("Manifest " + fieldName));
+        }
+
+        [Test]
+        public void PluginYG2_manifest_policy_accepts_reordered_order_independent_sets()
+        {
+            IntegrationManifestProbe manifest = LoadManifest();
+            SetManifestList(manifest, "modules", Reverse(manifest.modules));
+
+            List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ManifestPolicyErrors(
+                JsonUtility.ToJson(manifest));
+
+            Assert.That(errors, Is.Empty);
+        }
+
+        [Test]
         public void PluginYG2_release_configuration_rejects_a_partial_or_custom_sdk_path()
         {
             var errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ConfigurationErrors(
@@ -270,16 +327,192 @@ namespace RobotArena.WebGL.Editor.Tests
 
         private static IntegrationManifestProbe LoadManifest()
         {
-            string projectRoot = Directory.GetParent(Application.dataPath).FullName;
             return JsonUtility.FromJson<IntegrationManifestProbe>(File.ReadAllText(
-                Path.Combine(projectRoot, "Tools/RobotArenaPluginYG2Integration.json")));
+                GetCommittedManifestPath()));
+        }
+
+        private static string ReadCommittedManifestJson()
+        {
+            return File.ReadAllText(GetCommittedManifestPath());
+        }
+
+        private static string GetCommittedManifestPath()
+        {
+            string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+            return Path.Combine(projectRoot, "Tools/RobotArenaPluginYG2Integration.json");
+        }
+
+        private static IEnumerable<TestCaseData> PluginYG2ManifestScalarMutations()
+        {
+            yield return new TestCaseData("plugin", "PluginYG2-custom");
+            yield return new TestCaseData("pluginVersion", "v2.0093");
+            yield return new TestCaseData("versionFile", "Assets/PluginYourGames/OtherVersion.txt");
+            yield return new TestCaseData("templateFile", "Assets/WebGLTemplates/Other/index.html");
+            yield return new TestCaseData("unityTemplate", "PROJECT:OtherTemplate");
+            yield return new TestCaseData("vendorRoot", "Assets/OtherVendor");
+            yield return new TestCaseData("platform", "OtherPlatform");
+            yield return new TestCaseData("sourceArchiveSha256", new string('0', 64));
+            yield return new TestCaseData("vendoredFingerprint", new string('1', 64));
+            yield return new TestCaseData("sdkLoader", "<script src=\"/other-sdk.js\"></script>");
+            yield return new TestCaseData("sdkInitializer", "OtherSdk.init()");
+        }
+
+        private static IEnumerable<TestCaseData> PluginYG2ManifestExactSetMutations()
+        {
+            string[] fields =
+            {
+                "modules",
+                "requiredVendorFiles",
+                "requiredDefines",
+                "requiredArtifactMarkers",
+                "exactlyOnceArtifactMarkers",
+                "forbiddenArtifactMarkers"
+            };
+
+            foreach (string field in fields)
+            {
+                yield return new TestCaseData(field, true);
+                yield return new TestCaseData(field, false);
+            }
+        }
+
+        private static string[] GetManifestList(
+            IntegrationManifestProbe manifest,
+            string fieldName)
+        {
+            switch (fieldName)
+            {
+                case "modules":
+                    return manifest.modules;
+                case "requiredVendorFiles":
+                    return manifest.requiredVendorFiles;
+                case "requiredDefines":
+                    return manifest.requiredDefines;
+                case "requiredArtifactMarkers":
+                    return manifest.requiredArtifactMarkers;
+                case "exactlyOnceArtifactMarkers":
+                    return manifest.exactlyOnceArtifactMarkers;
+                case "forbiddenArtifactMarkers":
+                    return manifest.forbiddenArtifactMarkers;
+                default:
+                    Assert.Fail("Unknown manifest list: " + fieldName);
+                    return null;
+            }
+        }
+
+        private static void SetManifestList(
+            IntegrationManifestProbe manifest,
+            string fieldName,
+            string[] values)
+        {
+            switch (fieldName)
+            {
+                case "modules":
+                    manifest.modules = values;
+                    break;
+                case "requiredVendorFiles":
+                    manifest.requiredVendorFiles = values;
+                    break;
+                case "requiredDefines":
+                    manifest.requiredDefines = values;
+                    break;
+                case "requiredArtifactMarkers":
+                    manifest.requiredArtifactMarkers = values;
+                    break;
+                case "exactlyOnceArtifactMarkers":
+                    manifest.exactlyOnceArtifactMarkers = values;
+                    break;
+                case "forbiddenArtifactMarkers":
+                    manifest.forbiddenArtifactMarkers = values;
+                    break;
+                default:
+                    Assert.Fail("Unknown manifest list: " + fieldName);
+                    break;
+            }
+        }
+
+        private static string[] RemoveFirst(string[] values)
+        {
+            string[] result = new string[values.Length - 1];
+            Array.Copy(values, 1, result, 0, result.Length);
+            return result;
+        }
+
+        private static string[] Append(string[] values, string value)
+        {
+            string[] result = new string[values.Length + 1];
+            Array.Copy(values, result, values.Length);
+            result[values.Length] = value;
+            return result;
+        }
+
+        private static string[] Reverse(string[] values)
+        {
+            string[] result = (string[])values.Clone();
+            Array.Reverse(result);
+            return result;
+        }
+
+        private static void SetManifestScalar(
+            IntegrationManifestProbe manifest,
+            string fieldName,
+            string value)
+        {
+            switch (fieldName)
+            {
+                case "plugin":
+                    manifest.plugin = value;
+                    break;
+                case "pluginVersion":
+                    manifest.pluginVersion = value;
+                    break;
+                case "versionFile":
+                    manifest.versionFile = value;
+                    break;
+                case "templateFile":
+                    manifest.templateFile = value;
+                    break;
+                case "unityTemplate":
+                    manifest.unityTemplate = value;
+                    break;
+                case "vendorRoot":
+                    manifest.vendorRoot = value;
+                    break;
+                case "platform":
+                    manifest.platform = value;
+                    break;
+                case "sourceArchiveSha256":
+                    manifest.sourceArchiveSha256 = value;
+                    break;
+                case "vendoredFingerprint":
+                    manifest.vendoredFingerprint = value;
+                    break;
+                case "sdkLoader":
+                    manifest.sdkLoader = value;
+                    break;
+                case "sdkInitializer":
+                    manifest.sdkInitializer = value;
+                    break;
+                default:
+                    Assert.Fail("Unknown manifest scalar: " + fieldName);
+                    break;
+            }
         }
 
         [Serializable]
         private sealed class IntegrationManifestProbe
         {
+            public string plugin;
             public string pluginVersion;
+            public string sourceArchiveSha256;
+            public string vendoredFingerprint;
+            public string versionFile;
+            public string templateFile;
+            public string unityTemplate;
+            public string vendorRoot;
             public string platform;
+            public string[] modules;
+            public string[] requiredVendorFiles;
             public string sdkLoader;
             public string sdkInitializer;
             public string[] requiredDefines;

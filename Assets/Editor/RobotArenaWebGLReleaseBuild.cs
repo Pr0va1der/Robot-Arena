@@ -770,6 +770,19 @@ namespace RobotArena.WebGL.Editor
                 manifest);
         }
 
+        public static List<string> GetPluginYG2ManifestPolicyErrors(string manifestJson)
+        {
+            var errors = new List<string>();
+            PluginYG2IntegrationManifest manifest = ParsePluginYG2Manifest(manifestJson, errors);
+            if (manifest == null)
+            {
+                return errors;
+            }
+
+            errors.AddRange(GetPluginYG2ManifestErrors(manifest));
+            return errors;
+        }
+
         public static List<string> GetPluginYG2ArtifactErrors(string artifactSource)
         {
             var manifestErrors = new List<string>();
@@ -1100,10 +1113,28 @@ namespace RobotArena.WebGL.Editor
                 return null;
             }
 
+            string manifestJson;
+            try
+            {
+                manifestJson = File.ReadAllText(manifestPath);
+            }
+            catch (Exception exception)
+            {
+                errors.Add("Manifest file cannot be read: " + exception.Message);
+                return null;
+            }
+
+            return ParsePluginYG2Manifest(manifestJson, errors);
+        }
+
+        private static PluginYG2IntegrationManifest ParsePluginYG2Manifest(
+            string manifestJson,
+            List<string> errors)
+        {
             try
             {
                 PluginYG2IntegrationManifest manifest = JsonUtility.FromJson<PluginYG2IntegrationManifest>(
-                    File.ReadAllText(manifestPath));
+                    manifestJson ?? string.Empty);
                 if (manifest == null)
                 {
                     errors.Add("Manifest JSON is empty.");
