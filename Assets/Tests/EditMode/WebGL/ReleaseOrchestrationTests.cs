@@ -44,7 +44,7 @@ namespace RobotArena.WebGL.Editor.Tests
         [Test]
         public void Configuration_failure_runs_common_finally_and_writes_full_failure_report()
         {
-            File.WriteAllText(reportPath, "keep this report");
+            SeedStableReleaseSet();
             string lastSuccessfulCandidate = Path.Combine(
                 temporaryDirectory,
                 "last-successful-candidate.txt");
@@ -63,7 +63,7 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain("release configuration is invalid"));
             Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
-            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("keep this report"));
+            AssertStableReleaseSet();
             Assert.That(File.ReadAllText(lastSuccessfulCandidate), Is.EqualTo("keep this candidate"));
             Assert.That(operations.BuildCallCount, Is.Zero);
 
@@ -105,6 +105,7 @@ namespace RobotArena.WebGL.Editor.Tests
         [Test]
         public void Failed_unity_build_writes_typed_outcome_and_never_validates_an_artifact()
         {
+            SeedStableReleaseSet();
             var operations = new ControlledReleaseOperations
             {
                 FailureStage = ControlledFailureStage.Build
@@ -116,6 +117,7 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain("release build failed: Failed"));
             Assert.That(operations.BuildCallCount, Is.EqualTo(1));
+            AssertStableReleaseSet();
 
             ReleaseReportProbe report = ReadAttemptReport();
             Assert.That(report.validationStage, Is.EqualTo("build"));
@@ -215,6 +217,49 @@ namespace RobotArena.WebGL.Editor.Tests
         }
 
         [Test]
+        public void Output_promotion_failure_preserves_the_previous_release_set()
+        {
+            File.WriteAllText(outputDirectory, "stable output path");
+            File.WriteAllText(archivePath, "stable archive");
+            File.WriteAllText(reportPath, "stable report");
+
+            Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(
+                    CreateContext(new ControlledReleaseOperations())));
+
+            Assert.That(File.ReadAllText(outputDirectory), Is.EqualTo("stable output path"));
+            Assert.That(File.ReadAllText(archivePath), Is.EqualTo("stable archive"));
+            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("stable report"));
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
+            Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
+            Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
+        }
+
+        [Test]
+        public void Report_promotion_failure_preserves_the_previous_release_set()
+        {
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "last-successful.txt"),
+                "stable output");
+            File.WriteAllText(archivePath, "stable archive");
+            Directory.CreateDirectory(reportPath);
+
+            Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(
+                    CreateContext(new ControlledReleaseOperations())));
+
+            Assert.That(
+                File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
+                Is.EqualTo("stable output"));
+            Assert.That(File.ReadAllText(archivePath), Is.EqualTo("stable archive"));
+            Assert.That(Directory.Exists(reportPath), Is.True);
+            Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
+            Assert.That(Directory.Exists(outputDirectory + ".candidate"), Is.False);
+            Assert.That(File.Exists(archivePath + ".candidate"), Is.False);
+        }
+
+        [Test]
         public void Production_artifact_validators_scan_generated_files_beyond_root_index()
         {
             Directory.CreateDirectory(outputDirectory);
@@ -268,6 +313,7 @@ namespace RobotArena.WebGL.Editor.Tests
             ControlledFailureStage failureStage,
             string expectedStage)
         {
+            SeedStableReleaseSet();
             var operations = new ControlledReleaseOperations
             {
                 FailureStage = failureStage
@@ -280,6 +326,7 @@ namespace RobotArena.WebGL.Editor.Tests
             Assert.That(failure, Is.Not.Null);
             Assert.That(failure.Message, Does.Contain(expectedStage));
             Assert.That(File.Exists(reportPath + ".candidate"), Is.True);
+            AssertStableReleaseSet();
 
             ReleaseReportProbe report = ReadAttemptReport();
             Assert.That(report.validationStage, Is.EqualTo(expectedStage));
@@ -358,6 +405,25 @@ namespace RobotArena.WebGL.Editor.Tests
         {
             return JsonUtility.FromJson<ReleaseReportProbe>(
                 File.ReadAllText(reportPath + ".candidate"));
+        }
+
+        private void SeedStableReleaseSet()
+        {
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "last-successful.txt"),
+                "last successful output");
+            File.WriteAllText(archivePath, "last successful archive");
+            File.WriteAllText(reportPath, "last successful report");
+        }
+
+        private void AssertStableReleaseSet()
+        {
+            Assert.That(
+                File.ReadAllText(Path.Combine(outputDirectory, "last-successful.txt")),
+                Is.EqualTo("last successful output"));
+            Assert.That(File.ReadAllText(archivePath), Is.EqualTo("last successful archive"));
+            Assert.That(File.ReadAllText(reportPath), Is.EqualTo("last successful report"));
         }
 
         private static string ComputeSha256(string filePath)

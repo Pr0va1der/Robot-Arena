@@ -106,14 +106,6 @@ namespace RobotArena.Platform
                 return;
             }
 
-            if (!string.IsNullOrEmpty(yandexLifecycleToken) &&
-                !string.Equals(token, yandexLifecycleToken, StringComparison.Ordinal))
-            {
-                Debug.LogWarning(
-                    "[RobotArena.PluginYG2.Transport] invalid Yandex lifecycle token: already registered");
-                return;
-            }
-
             yandexLifecycleToken = token;
         }
 

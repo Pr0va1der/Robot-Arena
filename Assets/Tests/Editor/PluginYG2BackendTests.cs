@@ -172,7 +172,7 @@ namespace RobotArena.Session.Tests
         }
 
         [Test]
-        public void Runtime_pause_channel_requires_registered_yandex_origin_token()
+        public void Runtime_pause_channel_updates_and_requires_yandex_origin_token()
         {
             Type channelType = typeof(RobotArenaPluginYG2PlatformPauseEvent).Assembly.GetType(
                 "RobotArena.Platform.RobotArenaPluginYG2RuntimeChannel");
@@ -229,12 +229,29 @@ namespace RobotArena.Session.Tests
 
                 Assert.That(received, Is.Empty);
 
+                publishState.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"initState\":\"failed\",\"lifecycleToken\":\"updated-token\"}"
+                    });
+                LogAssert.Expect(
+                    LogType.Warning,
+                    new Regex("\\[RobotArena\\.PluginYG2\\.Transport\\] invalid platform pause payload:.*"));
                 publishPause.Invoke(
                     null,
                     new object[]
                     {
                         "{\"source\":\"yandex-lifecycle\",\"state\":\"paused\","
                         + "\"token\":\"controlled-token\"}"
+                    });
+
+                publishPause.Invoke(
+                    null,
+                    new object[]
+                    {
+                        "{\"source\":\"yandex-lifecycle\",\"state\":\"paused\","
+                        + "\"token\":\"updated-token\"}"
                     });
 
                 Assert.That(received, Has.Count.EqualTo(1));
