@@ -243,6 +243,7 @@ namespace RobotArena.WebGL.Editor
             int changedTextureCount = 0;
             bool releaseIsUploadReady = false;
             bool candidatePromoted = false;
+            bool candidatePathsPrepared = false;
 
             try
             {
@@ -251,6 +252,7 @@ namespace RobotArena.WebGL.Editor
                     candidateOutputDirectory,
                     candidateArchivePath,
                     candidateReportPath);
+                candidatePathsPrepared = true;
 
                 validationStage = RobotArenaReleaseValidationStage.Configuration;
                 if (string.IsNullOrEmpty(context.TemplateName))
@@ -369,6 +371,7 @@ namespace RobotArena.WebGL.Editor
                     artifactValidation,
                     archiveValidation,
                     candidateArchivePath,
+                    candidatePathsPrepared,
                     context.PluginVersion,
                     changedTextureCount,
                     validationStage,
@@ -420,6 +423,7 @@ namespace RobotArena.WebGL.Editor
                             artifactValidation,
                             archiveValidation,
                             candidateArchivePath,
+                            candidatePathsPrepared,
                             context.PluginVersion,
                             changedTextureCount,
                             validationStage,
@@ -487,6 +491,7 @@ namespace RobotArena.WebGL.Editor
             RobotArenaReleaseValidationResult artifactValidation,
             RobotArenaReleaseValidationResult archiveValidation,
             string archivePath,
+            bool candidatePathsPrepared,
             string attemptedPluginVersion,
             int changedTextureCount,
             RobotArenaReleaseValidationStage validationStage,
@@ -495,7 +500,7 @@ namespace RobotArena.WebGL.Editor
         {
             Directory.CreateDirectory(Path.GetDirectoryName(reportPath));
             List<ReleaseFileReport> files = new List<ReleaseFileReport>();
-            if (File.Exists(archivePath))
+            if (candidatePathsPrepared && File.Exists(archivePath))
             {
                 try
                 {
@@ -529,12 +534,12 @@ namespace RobotArena.WebGL.Editor
             integration = WithAttemptedPluginVersion(integration, attemptedPluginVersion);
 
             string artifactPath = Path.Combine(outputDirectory, "index.html");
-            string artifactChecksum = artifactValidation == null
-                ? string.Empty
-                : TryComputeFileSha256(artifactPath);
-            string archiveChecksum = archiveValidation == null
-                ? string.Empty
-                : TryComputeFileSha256(archivePath);
+            string artifactChecksum = candidatePathsPrepared
+                ? TryComputeFileSha256(artifactPath)
+                : string.Empty;
+            string archiveChecksum = candidatePathsPrepared
+                ? TryComputeFileSha256(archivePath)
+                : string.Empty;
             string vendoredFingerprint = string.Empty;
             var reportManifestErrors = new List<string>();
             PluginYG2IntegrationManifest reportManifest = LoadPluginYG2Manifest(reportManifestErrors);

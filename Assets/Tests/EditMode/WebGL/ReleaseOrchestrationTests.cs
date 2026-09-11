@@ -159,6 +159,91 @@ namespace RobotArena.WebGL.Editor.Tests
         }
 
         [Test]
+        public void Artifact_validator_without_result_keeps_available_artifact_checksum()
+        {
+            SeedStableReleaseSet();
+            string expectedArtifactChecksum = ComputeContentsSha256(
+                ControlledReleaseOperations.ValidArtifactSource);
+            var operations = new ControlledReleaseOperations
+            {
+                FailureStage = ControlledFailureStage.ArtifactNoResult
+            };
+
+            BuildFailedException failure = Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(CreateContext(operations)));
+
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Message, Does.Contain("artifact"));
+            AssertStableReleaseSet();
+
+            ReleaseReportProbe report = ReadAttemptReport();
+            Assert.That(report.validationStage, Is.EqualTo("artifact"));
+            Assert.That(report.artifactValidationCompleted, Is.False);
+            Assert.That(report.artifactIsValid, Is.False);
+            Assert.That(report.artifactChecksumSha256, Is.EqualTo(expectedArtifactChecksum));
+            Assert.That(report.archiveValidationCompleted, Is.False);
+            Assert.That(report.archiveChecksumSha256, Is.Empty);
+            Assert.That(report.validationErrors, Has.Some.Contains("Validation did not return a result"));
+        }
+
+        [Test]
+        public void Archive_validator_without_result_keeps_available_archive_checksum()
+        {
+            SeedStableReleaseSet();
+            string expectedArtifactChecksum = ComputeContentsSha256(
+                ControlledReleaseOperations.ValidArtifactSource);
+            var operations = new ControlledReleaseOperations
+            {
+                FailureStage = ControlledFailureStage.ArchiveNoResult
+            };
+
+            BuildFailedException failure = Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(CreateContext(operations)));
+
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Message, Does.Contain("archive"));
+            AssertStableReleaseSet();
+
+            ReleaseReportProbe report = ReadAttemptReport();
+            Assert.That(report.validationStage, Is.EqualTo("archive"));
+            Assert.That(report.artifactValidationCompleted, Is.True);
+            Assert.That(report.artifactIsValid, Is.True);
+            Assert.That(report.artifactChecksumSha256, Is.EqualTo(expectedArtifactChecksum));
+            Assert.That(report.archiveValidationCompleted, Is.False);
+            Assert.That(report.archiveIsValid, Is.False);
+            Assert.That(report.archiveChecksumSha256, Has.Length.EqualTo(64));
+            Assert.That(report.packageIsPassing, Is.False);
+            Assert.That(report.validationErrors, Has.Some.Contains("Validation did not return a result"));
+        }
+
+        [Test]
+        public void Prepare_failure_does_not_report_stale_candidate_evidence()
+        {
+            SeedStableReleaseSet();
+            SeedStaleCandidateEvidence();
+            var operations = new ControlledReleaseOperations
+            {
+                FailureStage = ControlledFailureStage.Prepare
+            };
+
+            BuildFailedException failure = Assert.Throws<BuildFailedException>(
+                () => RobotArenaWebGLReleaseBuild.RunReleasePackage(CreateContext(operations)));
+
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Message, Does.Contain("prepare"));
+            AssertStableReleaseSet();
+
+            ReleaseReportProbe report = ReadAttemptReport();
+            Assert.That(report.validationStage, Is.EqualTo("prepare"));
+            Assert.That(report.artifactValidationCompleted, Is.False);
+            Assert.That(report.artifactChecksumSha256, Is.Empty);
+            Assert.That(report.archiveValidationCompleted, Is.False);
+            Assert.That(report.archiveChecksumSha256, Is.Empty);
+            Assert.That(report.releaseIsUploadReady, Is.False);
+            Assert.That(report.validationErrors, Has.Some.Contains("controlled prepare failure"));
+        }
+
+        [Test]
         public void Successful_release_promotes_candidate_and_marks_upload_ready()
         {
             Directory.CreateDirectory(outputDirectory);
@@ -420,6 +505,25 @@ namespace RobotArena.WebGL.Editor.Tests
             File.WriteAllText(reportPath, "last successful report");
         }
 
+        private void SeedStaleCandidateEvidence()
+        {
+            string candidateOutputDirectory = outputDirectory + ".candidate";
+            string candidateArchivePath = archivePath + ".candidate";
+            Directory.CreateDirectory(candidateOutputDirectory);
+            File.WriteAllText(
+                Path.Combine(candidateOutputDirectory, "index.html"),
+                ControlledReleaseOperations.ValidArtifactSource);
+            Directory.CreateDirectory(Path.Combine(candidateOutputDirectory, "Build"));
+            File.WriteAllText(
+                Path.Combine(candidateOutputDirectory, "Build", "Game.data"),
+                "stale package data");
+            ZipFile.CreateFromDirectory(
+                candidateOutputDirectory,
+                candidateArchivePath,
+                System.IO.Compression.CompressionLevel.Optimal,
+                includeBaseDirectory: false);
+        }
+
         private void AssertStableReleaseSet()
         {
             AssertFileBytes(
@@ -445,12 +549,25 @@ namespace RobotArena.WebGL.Editor.Tests
             }
         }
 
+        private static string ComputeContentsSha256(string contents)
+        {
+            using (SHA256 hash = SHA256.Create())
+            {
+                return BitConverter.ToString(
+                    hash.ComputeHash(Encoding.UTF8.GetBytes(contents)))
+                    .Replace("-", string.Empty);
+            }
+        }
+
         public enum ControlledFailureStage
         {
             None,
+            Prepare,
             Build,
             Artifact,
+            ArtifactNoResult,
             Archive,
+            ArchiveNoResult,
             Package
         }
 
@@ -469,6 +586,11 @@ namespace RobotArena.WebGL.Editor.Tests
 
             public void PreparePaths(string outputPath, string zipPath, string reportPath)
             {
+                if (FailureStage == ControlledFailureStage.Prepare)
+                {
+                    throw new IOException("controlled prepare failure");
+                }
+
                 if (Directory.Exists(outputPath))
                 {
                     Directory.Delete(outputPath, recursive: true);
@@ -524,6 +646,11 @@ namespace RobotArena.WebGL.Editor.Tests
 
             public RobotArenaReleaseValidationResult ValidateArtifact(string outputPath)
             {
+                if (FailureStage == ControlledFailureStage.ArtifactNoResult)
+                {
+                    return null;
+                }
+
                 List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactDirectoryErrors(
                     outputPath);
                 return new RobotArenaReleaseValidationResult(Integration, errors);
@@ -552,6 +679,11 @@ namespace RobotArena.WebGL.Editor.Tests
 
             public RobotArenaReleaseValidationResult ValidateArchive(string zipPath)
             {
+                if (FailureStage == ControlledFailureStage.ArchiveNoResult)
+                {
+                    return null;
+                }
+
                 List<string> errors = RobotArenaWebGLReleaseBuild.GetPluginYG2ArtifactArchiveErrors(
                     zipPath);
                 return new RobotArenaReleaseValidationResult(Integration, errors);

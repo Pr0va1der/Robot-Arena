@@ -287,6 +287,7 @@ namespace RobotArena.WebGL.Editor.Tests
                         null,
                         null,
                         missingArchivePath,
+                        false,
                         Manifest.pluginVersion,
                         0,
                         RobotArenaReleaseValidationStage.Configuration,
